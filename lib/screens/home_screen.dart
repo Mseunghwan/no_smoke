@@ -10,6 +10,7 @@ import '../models/profile_item.dart';
 import '../widgets/goal_card.dart' as goals;
 import '../widgets/profile_preview.dart';
 import '../widgets/stats_card.dart';
+import '../widgets/achievement_card.dart' as achievements;
 import '../widgets/daliy_survey_card.dart';
 import 'profile_screen.dart';
 import 'challenge_screen.dart';
@@ -203,8 +204,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           ],
         ),
-        actions: [
-          // 기존 프로필 버튼
+        actions: [ // 기존 프로필 버튼
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: GestureDetector(
@@ -306,6 +306,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           goal: widget.settings.goal ?? '목표를 설정해주세요',
                           quitDate: widget.settings.quitDate, // quitDate를 추가로 전달
                           targetDate: widget.settings.targetDate, // targetDate도 전달
+                        ),
+                        const SizedBox(height: 24),
+                        achievements.AchievementCard(
+                          points: _points,
+                          onProfileTap: () {
+                            _navigateWithAnimation(
+                              ProfileScreen(currentPoints: _points),
+                            );
+                          },
+                          onChallengeTap: () {
+                            _navigateWithAnimation(
+                              ChallengeScreen(
+                                userSettings: widget.settings, // 추가된 부분
+                                onPointsEarned: (points) {
+                                  setState(() {
+                                    _points += points;
+                                  });
+                                },
+                                savedMoney: _calculateSavedMoney(),
+                                savedCigarettes: _calculateSavedCigarettes(),
+                                consecutiveDays: DateTime.now().difference(widget.settings.quitDate).inDays,
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 24),
                       ],
