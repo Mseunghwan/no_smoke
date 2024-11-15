@@ -8,7 +8,7 @@
     <!-- Google Fit permissions -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
     <application
-        android:label="letsgo"
+        android:label="NoSmoke"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
