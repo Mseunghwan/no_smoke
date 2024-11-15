@@ -11,6 +11,7 @@ import '../widgets/profile_preview.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/daliy_survey_card.dart';
 import 'profile_screen.dart';
+import 'challenge_screen.dart';
 import 'chat_screen.dart';
 import 'daily_survey_screen.dart';
 import '../models/daily_survey.dart';
@@ -139,6 +140,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ChatScreen(smokeFreeHours: _points),
         );
         break;
+      case 2:
+        _navigateWithAnimation(
+          ChallengeScreen(
+            userSettings: widget.settings, // 추가된 부분
+            onPointsEarned: (points) {
+              setState(() {
+                _points += points;
+              });
+            },
+            savedMoney: _calculateSavedMoney(),
+            savedCigarettes: _calculateSavedCigarettes(),
+            consecutiveDays: DateTime.now().difference(widget.settings.quitDate).inDays,
+          ),
+        );
+        break;
     }
   }
 
@@ -177,6 +193,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ],
         ),
         actions: [
+          // 알림 테스트 버튼 추가
           // 기존 프로필 버튼
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
