@@ -65,6 +65,7 @@ class _MyAppState extends State<MyApp> {
         if (snapshot.hasData) {
           return MaterialApp(
             title: 'LetsGo',
+            debugShowCheckedModeBanner: false,
             theme: ThemeData(
               primarySwatch: Colors.blue,
             ),
