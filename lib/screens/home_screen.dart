@@ -1,36 +1,45 @@
-// screens/home_screen.dart
 import 'package:flutter/material.dart';
+import '../models/user_settings.dart';
 
 class HomeScreen extends StatelessWidget {
+  final UserSettings settings;
+
+  const HomeScreen({Key? key, required this.settings}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
-    // OnboardingScreen에서 전달된 데이터를 받음
-    final Map<String, String> arguments =
-    ModalRoute.of(context)?.settings.arguments as Map<String, String>;
-
-    final smokingAmount = arguments['smokingAmount'];
-    final smokingCost = arguments['smokingCost'];
-
     return Scaffold(
       appBar: AppBar(
-        title: Text('홈 화면'),
+        title: Text('${settings.nickname}님의 금연 도우미'),
       ),
-      body: Center(
+      body: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '하루 흡연량: $smokingAmount 개비',
-              style: TextStyle(fontSize: 20),
+              '닉네임: ${settings.nickname}',
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
             Text(
-              '한 갑당 가격: $smokingCost 원',
-              style: TextStyle(fontSize: 20),
+              '담배 종류: ${settings.cigaretteType}',
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
-            SizedBox(height: 20),
             Text(
-              '금연을 시작해 보세요!',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              '하루 흡연량: ${settings.cigarettesPerDay}개비',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            Text(
+              '목표: ${settings.goal}',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            Text(
+              '금연 시작일: ${settings.quitDate.toLocal().toString().split(' ')[0]}',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            Text(
+              '목표 달성일: ${settings.targetDate.toLocal().toString().split(' ')[0]}',
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
           ],
         ),
