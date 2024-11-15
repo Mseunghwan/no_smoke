@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/user_settings.dart';
-import '../screens/chat_screen.dart'; // ChatScreen이 있는 경로로 수정
-import '../widgets/stats_card.dart'; // StatsCard 파일 경로 확인
+import '../widgets/stats_card.dart'; // StatsCard
+import '../widgets/daliy_survey_card.dart'; // DailySurveyCard
+import 'chat_screen.dart';
+import 'daily_survey_screen.dart'; // DailySurveyScreen
 
 class HomeScreen extends StatelessWidget {
   final UserSettings settings;
@@ -29,14 +31,20 @@ class HomeScreen extends StatelessWidget {
               savedCigarettes: _calculateSavedCigarettes(settings),
             ),
             const SizedBox(height: 20),
-            Text(
-              '금연 시작일: ${DateFormat('yyyy-MM-dd').format(settings.quitDate)}',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              '목표: ${settings.goal ?? '목표를 설정해주세요'}',
-              style: Theme.of(context).textTheme.bodyLarge,
+            DailySurveyCard(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DailySurveyScreen(
+                      onCigarettesUpdate: (cigarettes) {
+                        // 설문 완료 후 업데이트할 로직 추가 가능
+                      },
+                    ),
+                  ),
+                );
+              },
+              hasCompleted: false, // 설문 완료 여부에 따라 true/false로 설정
             ),
             const SizedBox(height: 30),
             ElevatedButton(
