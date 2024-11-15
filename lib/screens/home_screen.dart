@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/user_settings.dart';
-import 'chat_screen.dart';
+import '../screens/chat_screen.dart'; // ChatScreen이 있는 경로로 수정
+import '../widgets/stats_card.dart'; // StatsCard 파일 경로 확인
 
 class HomeScreen extends StatelessWidget {
   final UserSettings settings;
@@ -11,42 +12,33 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final daysSince = DateTime.now().difference(settings.quitDate).inDays;
-    final numberFormat = NumberFormat.currency(
-      symbol: '₩',
-      locale: 'ko_KR',
-      decimalDigits: 0,
-    );
 
     return Scaffold(
       appBar: AppBar(
         title: Text('${settings.nickname}님의 금연 여정'),
         centerTitle: true,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            StatsCard(
+              daysSince: daysSince,
+              savedMoney: _calculateSavedMoney(settings),
+              savedCigarettes: _calculateSavedCigarettes(settings),
+            ),
+            const SizedBox(height: 20),
             Text(
               '금연 시작일: ${DateFormat('yyyy-MM-dd').format(settings.quitDate)}',
-              style: Theme.of(context).textTheme.bodyLarge, // subtitle1 대신 bodyLarge 사용
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
             const SizedBox(height: 10),
             Text(
-              '금연 진행일: $daysSince일',
-              style: Theme.of(context).textTheme.bodyLarge, // subtitle1 대신 bodyLarge 사용
+              '목표: ${settings.goal ?? '목표를 설정해주세요'}',
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
-            const SizedBox(height: 10),
-            Text(
-              '절약한 금액: ${numberFormat.format(_calculateSavedMoney(settings))}',
-              style: Theme.of(context).textTheme.bodyLarge, // subtitle1 대신 bodyLarge 사용
-            ),
-            const SizedBox(height: 10),
-            Text(
-              '피하지 않은 담배: ${_calculateSavedCigarettes(settings)}개비',
-              style: Theme.of(context).textTheme.bodyLarge, // subtitle1 대신 bodyLarge 사용
-            ),
-            const Spacer(),
+            const SizedBox(height: 30),
             ElevatedButton(
               onPressed: () {
                 Navigator.push(
