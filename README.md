@@ -91,7 +91,6 @@ D --> F[데이터 분석]
 - **AI 엔진**: Google Gemini API
 - **상태관리**: Provider 6.0.5
 - **데이터베이스**: SharedPreferences
-- **API 통신**: Dio 5.0.0
 
 ## 🚀 시작하기
 
