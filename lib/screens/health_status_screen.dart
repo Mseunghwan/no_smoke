@@ -1,15 +1,9 @@
-// screens/health_status_screen.dart
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+import 'package:health/health.dart';
 import '../models/health_status.dart';
 import '../models/user_settings.dart';
 import '../models/daily_survey.dart';
 import '../services/gemini_service.dart';
-
-// Chart 라이브러리를 사용하려면 (선택사항)
-import 'package:fl_chart/fl_chart.dart';
 
 class HealthStatusScreen extends StatefulWidget {
   final UserSettings settings;
@@ -25,29 +19,130 @@ class HealthStatusScreen extends StatefulWidget {
   _HealthStatusScreenState createState() => _HealthStatusScreenState();
 }
 
+
+
 class _HealthStatusScreenState extends State<HealthStatusScreen> {
   late HealthStatus _healthStatus;
   bool _isLoading = true;
-  String _aiAdvice = '';
+  final health = Health(); // Changed from HealthFactory to Health
+
+  int? _heartRate;
+  int? _steps;
+  double? _oxygenLevel;
+
+  String _createHealthAnalysisPrompt(int hours, List<DailySurvey> surveys) {
+    final avgStressLevel = surveys.isEmpty
+        ? 0
+        : surveys.map((s) => s.stressLevel).reduce((a, b) => a + b) / surveys.length;
+
+    return '''
+전문의의 관점에서 사용자의 금연 진행 상태를 분석해주세요:
+
+기본 정보:
+- 금연 시간: $hours 시간
+- 평균 스트레스 레벨: ${avgStressLevel.toStringAsFixed(1)}/5
+
+신체 상태 데이터:
+- 심박수: ${_heartRate ?? '데이터 없음'} bpm
+- 일일 걸음 수: ${_steps ?? '데이터 없음'} steps
+- 산소포화도: ${_oxygenLevel?.toStringAsFixed(1) ?? '데이터 없음'}%
+
+분석 요청 사항:
+1. 현재 신체 기능 개선 상태
+2. 심혈관 건강 상태 평가
+3. 운동 능력 및 폐 기능 분석
+4. 스트레스 관리 전략 제안
+5. 앞으로의 건강 개선 전망
+''';
+  }
+
+  Future<String> _getAIAnalysis(String prompt) async {
+    try {
+      final response = await GeminiService.getResponse(prompt);
+      return response;
+    } catch (e) {
+      return '건강 분석을 불러오는데 실패했습니다.';
+    }
+  }
+
+  List<String> _calculateImprovements(int hours) {
+    final improvements = <String>[];
+    if (hours >= 8) improvements.add('혈중 산소량 정상화');
+    if (hours >= 24) improvements.add('심장마비 위험 감소');
+    if (hours >= 48) improvements.add('후각과 미각 개선');
+    if (hours >= 72) improvements.add('기관지 기능 회복');
+    if (hours >= 336) improvements.add('폐 기능 개선');
+    if (hours >= 2160) improvements.add('심장질환 위험 절반으로 감소');
+    return improvements;
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadHealthStatus();
+    _loadHealthData();
   }
+
+  Future<void> _loadHealthData() async {
+    try {
+      final types = [
+        HealthDataType.HEART_RATE,
+        HealthDataType.STEPS,
+        HealthDataType.BLOOD_OXYGEN,
+      ];
+
+      bool requested = await health.requestAuthorization(types);
+
+      if (requested) {
+        final now = DateTime.now();
+        final yesterday = now.subtract(const Duration(days: 1));
+
+        // 각 타입별로 데이터 요청
+        var heartRateData = await health.getHealthDataFromTypes(
+          types: [HealthDataType.HEART_RATE],
+          startTime: yesterday,
+          endTime: now,
+        );
+
+        var stepsData = await health.getHealthDataFromTypes(
+          types: [HealthDataType.STEPS],
+          startTime: yesterday,
+          endTime: now,
+        );
+
+        var oxygenData = await health.getHealthDataFromTypes(
+          types: [HealthDataType.BLOOD_OXYGEN],
+          startTime: yesterday,
+          endTime: now,
+        );
+
+        if (mounted) {
+          setState(() {
+            _heartRate = heartRateData.isNotEmpty ?
+            (heartRateData.last.value as num).round() : null;
+            _steps = stepsData.isNotEmpty ?
+            (stepsData.last.value as num).round() : null;
+            _oxygenLevel = oxygenData.isNotEmpty ?
+            (oxygenData.last.value as num).toDouble() : null;
+          });
+        }
+      }
+
+      await _loadHealthStatus();
+    } catch (e) {
+      print("Error loading health data: $e");
+      await _loadHealthStatus();
+    }
+  }
+
 
   Future<void> _loadHealthStatus() async {
     final hours = DateTime.now().difference(widget.settings.quitDate).inHours;
 
-    // 건강 상태 계산
     final lungCapacity = HealthStatus.calculateLungCapacity(hours);
     final bloodCirculation = HealthStatus.calculateBloodCirculation(hours);
     final nicotineLevel = HealthStatus.calculateNicotineLevel(hours);
 
-    // AI 분석을 위한 프롬프트 생성
     final prompt = _createHealthAnalysisPrompt(hours, widget.surveys);
-
-    // Gemini AI 분석 요청
     final analysis = await _getAIAnalysis(prompt);
 
     setState(() {
@@ -64,92 +159,6 @@ class _HealthStatusScreenState extends State<HealthStatusScreen> {
     });
   }
 
-  String _createHealthAnalysisPrompt(int hours, List<DailySurvey> surveys) {
-    final avgStressLevel = surveys.isEmpty
-        ? 0
-        : surveys.map((s) => s.stressLevel).reduce((a, b) => a + b) / surveys.length;
-    final avgUrgencyLevel = surveys.isEmpty
-        ? 0
-        : surveys.map((s) => s.urgencyLevel).reduce((a, b) => a + b) / surveys.length;
-
-    return '''
-사용자의 금연 상태를 분석하고 건강 조언을 해주세요:
-
-금연 시간: $hours 시간
-평균 스트레스 레벨: $avgStressLevel/5
-평균 흡연 욕구: $avgUrgencyLevel/5
-
-최근 설문 데이터:
-${surveys.map((s) => '- 날짜: ${s.date}, 스트레스: ${s.stressLevel}, 흡연욕구: ${s.urgencyLevel}').join('\n')}
-
-다음 내용을 포함해주세요:
-1. 현재 건강 상태 분석
-2. 개선된 신체 기능들
-3. 주의해야 할 점
-4. 스트레스 관리 조언
-5. 앞으로의 건강 개선 전망
-
-의학적 근거를 바탕으로 구체적으로 설명해주세요.
-''';
-  }
-
-  Future<String> _getAIAnalysis(String prompt) async {
-    // Gemini API 호출
-    try {
-      final response = await GeminiService.getResponse(prompt);
-      return response;
-    } catch (e) {
-      return '건강 분석을 불러오는데 실패했습니다.';
-    }
-  }
-
-  List<String> _calculateImprovements(int hours) {
-    final improvements = <String>[];
-
-    if (hours >= 8) improvements.add('혈중 산소량 정상화');
-    if (hours >= 24) improvements.add('심장마비 위험 감소');
-    if (hours >= 48) improvements.add('후각과 미각 개선');
-    if (hours >= 72) improvements.add('기관지 기능 회복');
-    if (hours >= 336) improvements.add('폐 기능 개선'); // 2주
-    if (hours >= 2160) improvements.add('심장질환 위험 절반으로 감소'); // 3개월
-
-    return improvements;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FE),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        title: const Text('건강 상태', style: TextStyle(color: Color(0xFF2D3142))),
-      ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHealthMetricsCard(),
-              const SizedBox(height: 20),
-              _buildImprovementsCard(),
-              const SizedBox(height: 20),
-              _buildAIAnalysisCard(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildHealthMetricsCard() {
     return Card(
       shape: RoundedRectangleBorder(
@@ -161,7 +170,7 @@ ${surveys.map((s) => '- 날짜: ${s.date}, 스트레스: ${s.stressLevel}, 흡�
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '건강 지표',
+              '금연 후 건강 개선',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -254,33 +263,44 @@ ${surveys.map((s) => '- 날짜: ${s.date}, 스트레스: ${s.stressLevel}, 흡�
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '개선된 건강 지표',
+              '건강 개선 현황',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 16),
-            ...(_healthStatus.improvements.map((improvement) =>
+            ..._healthStatus.improvements.map((improvement) =>
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Row(
                     children: [
-                      const Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 20,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           improvement,
-                          style: const TextStyle(fontSize: 16),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            height: 1.4,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-            )),
+            ),
           ],
         ),
       ),
@@ -299,13 +319,21 @@ ${surveys.map((s) => '- 날짜: ${s.date}, 스트레스: ${s.stressLevel}, 흡�
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.psychology,
-                  color: Theme.of(context).primaryColor,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.psychology,
+                    color: Theme.of(context).primaryColor,
+                    size: 24,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 const Text(
-                  'AI 건강 분석',
+                  '전문의 분석 리포트',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -313,16 +341,160 @@ ${surveys.map((s) => '- 날짜: ${s.date}, 스트레스: ${s.stressLevel}, 흡�
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              _healthStatus.aiAnalysis,
-              style: const TextStyle(
-                fontSize: 16,
-                height: 1.6,
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.grey[200]!,
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                _healthStatus.aiAnalysis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  height: 1.6,
+                  color: Color(0xFF2D3142),
+                ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FE),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        title: const Text('건강 분석 리포트',
+            style: TextStyle(color: Color(0xFF2D3142))),
+      ),
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildVitalSignsCard(),
+              const SizedBox(height: 20),
+              _buildHealthMetricsCard(),
+              const SizedBox(height: 20),
+              _buildImprovementsCard(),
+              const SizedBox(height: 20),
+              _buildAIAnalysisCard(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVitalSignsCard() {
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '실시간 건강 지표',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildVitalSignCard(
+                  icon: Icons.favorite,
+                  title: '심박수',
+                  value: _heartRate?.toString() ?? '-',
+                  unit: 'bpm',
+                  color: Colors.red,
+                ),
+                _buildVitalSignCard(
+                  icon: Icons.directions_walk,
+                  title: '걸음 수',
+                  value: _steps?.toString() ?? '-',
+                  unit: 'steps',
+                  color: Colors.green,
+                ),
+                _buildVitalSignCard(
+                  icon: Icons.air,
+                  title: '산소포화도',
+                  value: _oxygenLevel?.toStringAsFixed(1) ?? '-',
+                  unit: '%',
+                  color: Colors.blue,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVitalSignCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required String unit,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 30),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            unit,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,17 +1,15 @@
-// models/health_status.dart
 import 'package:flutter/material.dart';
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../models/daily_survey.dart';
+import 'dart:math' as math;
+import 'daily_survey.dart';
 
 class HealthStatus {
   final int smokeFreeHours;
-  final double lungCapacityImprovement; // 폐활량 개선도 (%)
-  final double bloodCirculationImprovement; // 혈액순환 개선도 (%)
-  final double nicotineLevel; // 니코틴 수치 (%)
-  final List<String> improvements; // 개선된 건강 지표들
-  final List<DailySurvey> recentSurveys; // 최근 설문 데이터
-  final String aiAnalysis; // AI 분석 결과
+  final double lungCapacityImprovement;
+  final double bloodCirculationImprovement;
+  final double nicotineLevel;
+  final List<String> improvements;
+  final List<DailySurvey> recentSurveys;
+  final String aiAnalysis;
 
   HealthStatus({
     required this.smokeFreeHours,
@@ -23,17 +21,45 @@ class HealthStatus {
     required this.aiAnalysis,
   });
 
-  // 금연 시간에 따른 건강 개선도 계산
   static double calculateLungCapacity(int hours) {
-    // 의학적 데이터 기반 계산
-    return (hours / 87600) * 100; // 10년 기준 최대 100% 개선
+    // 폐 기능은 2-12주에 걸쳐 점진적으로 개선
+    // 첫 72시간: 5%
+    // 2주: 30%
+    // 12주: 100%
+    if (hours <= 72) {
+      return 5.0 * (hours / 72);
+    } else if (hours <= 336) { // 2주
+      return 5.0 + (25.0 * ((hours - 72) / 264));
+    } else if (hours <= 2016) { // 12주
+      return 30.0 + (70.0 * ((hours - 336) / 1680));
+    }
+    return 100.0;
   }
 
   static double calculateBloodCirculation(int hours) {
-    return (hours / 2190) * 100; // 3개월 기준 100% 개선
+    // 혈액순환은 2-12주에 걸쳐 개선
+    // 첫 24시간: 10%
+    // 3일: 30%
+    // 2주: 60%
+    // 12주: 100%
+    if (hours <= 24) {
+      return 10.0 * (hours / 24);
+    } else if (hours <= 72) {
+      return 10.0 + (20.0 * ((hours - 24) / 48));
+    } else if (hours <= 336) {
+      return 30.0 + (30.0 * ((hours - 72) / 264));
+    } else if (hours <= 2016) {
+      return 60.0 + (40.0 * ((hours - 336) / 1680));
+    }
+    return 100.0;
   }
 
   static double calculateNicotineLevel(int hours) {
-    return 100 - ((hours / 336) * 100).clamp(0, 100); // 2주 기준 100% 감소
+    // 니코틴 반감기는 약 2시간
+    // 24시간 후: 50% 감소
+    // 48시간 후: 75% 감소
+    // 72시간 후: 100% 제거
+    if (hours >= 72) return 0.0;
+    return 100.0 * math.pow(0.5, hours / 24);
   }
 }
