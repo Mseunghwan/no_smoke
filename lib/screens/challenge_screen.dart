@@ -53,7 +53,22 @@ class _ChallengeScreenState extends State<ChallengeScreen>
 
   Future<void> initPrefs() async {
     prefs = await SharedPreferences.getInstance();
+
+    // 모든 challenge 상태 초기화
+    for (var key in prefs.getKeys()) {
+      if (key.startsWith('health_') || key.startsWith('finance_') || key.startsWith('clean_air_')) {
+        await prefs.remove(key);
+      }
+    }
+
     challenges = getChallenges();
+    for (var challenge in challenges) {
+      challenge.updateProgress(
+        widget.userSettings.cigarettePrice,
+        widget.userSettings.cigarettesPerDay,
+        widget.userSettings.quitDate,
+      );
+    }
     loadUnlockedStatus();
     updateChallenges();
   }

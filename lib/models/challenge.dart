@@ -36,13 +36,15 @@ class Challenge {
     required this.icon,
     required this.pointsReward,
   });
-
   void updateProgress(int cigarettePrice, int cigarettesPerDay, DateTime quitDate) {
-    daysSinceQuit = DateTime.now().difference(quitDate).inDays;
-    currentCigarettes = daysSinceQuit * cigarettesPerDay;
-    currentSavings = (currentCigarettes ~/ 20) * cigarettePrice;
-  }
+    final now = DateTime.now();
+    final startDate = DateTime(quitDate.year, quitDate.month, quitDate.day);
+    final endDate = DateTime(now.year, now.month, now.day);
 
+    daysSinceQuit = endDate.difference(startDate).inDays;
+    currentCigarettes = daysSinceQuit * cigarettesPerDay;
+    currentSavings = (currentCigarettes * cigarettePrice) ~/ 20;
+  }
   bool get isCompleted {
     if (requiredDays > 0) {
       return daysSinceQuit >= requiredDays;
