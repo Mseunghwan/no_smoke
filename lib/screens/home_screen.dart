@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../models/user_settings.dart';
 import '../provider/profile_provider.dart';
 import '../models/profile_item.dart';
+import '../widgets/goal_card.dart' as goals;
 import '../widgets/profile_preview.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/daliy_survey_card.dart';
@@ -14,8 +15,8 @@ import 'profile_screen.dart';
 import 'challenge_screen.dart';
 import 'chat_screen.dart';
 import 'daily_survey_screen.dart';
-import '../models/daily_survey.dart';
 import 'health_status_screen.dart';
+import '../models/daily_survey.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -37,7 +38,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   Map<String, ProfileItem> _equippedItems = {};
-  List<DailySurvey> _surveys = [];
 
   Future<List<DailySurvey>> _loadSurveys() async {
     final prefs = await SharedPreferences.getInstance();
@@ -72,13 +72,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     // ProfileProvider의 상태 변경을 구독
     context.read<ProfileProvider>().addListener(_onProfileProviderChanged);
-
-    _loadSurveys().then((surveys) {
-      setState(() {
-        _surveys = surveys;
-      });
-    });
-}
+  }
 
   @override
   void dispose() {
@@ -163,11 +157,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         );
         break;
-      case 3:  // 건강 상태 화면으로 이동
+      case 3:
+        final surveys = await _loadSurveys();  // 설문 데이터 로드
         _navigateWithAnimation(
           HealthStatusScreen(
             settings: widget.settings,
-            surveys: _surveys,
+            surveys: surveys,
           ),
         );
         break;
@@ -209,7 +204,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ],
         ),
         actions: [
-          // 알림 테스트 버튼 추가
           // 기존 프로필 버튼
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
@@ -307,6 +301,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             );
                           },
                         ),
+                        const SizedBox(height: 24),
+                        goals.GoalCard(
+                          goal: widget.settings.goal ?? '목표를 설정해주세요',
+                          quitDate: widget.settings.quitDate, // quitDate를 추가로 전달
+                          targetDate: widget.settings.targetDate, // targetDate도 전달
+                        ),
+                        const SizedBox(height: 24),
                       ],
                     ),
                   ),
