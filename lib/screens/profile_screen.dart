@@ -398,7 +398,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         right: 10,
                         child: Image.asset(
                           equippedItems['뱃지']!.imageAsset,
-                          height: 50,
+                          height: 100,
                           errorBuilder: (context, error, stackTrace) {
                             print('Error loading badge: ${equippedItems['뱃지']!
                                 .imageAsset}');

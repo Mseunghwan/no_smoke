@@ -523,33 +523,6 @@ class _ChallengeScreenState extends State<ChallengeScreen>
               ),
             ],
           ),
-          Center(
-            child: SizedBox(
-              width: 1, // 최소 너비
-              height: 1, // 최소 높이
-              child: ConfettiWidget(
-                confettiController: _confettiController,
-                blastDirection: -math.pi / 2,
-                maxBlastForce: 100,
-                minBlastForce: 80,
-                emissionFrequency: 0.05,
-                numberOfParticles: 50,
-                gravity: 0.3,
-                blastDirectionality: BlastDirectionality.explosive,
-                shouldLoop: false,
-                // 파티클이 더 넓게 퍼지도록 조정
-                minimumSize: const Size(10, 10), // 파티클 최소 크기
-                maximumSize: const Size(20, 20), // 파티클 최대 크기
-                colors: const [
-                  Colors.green,
-                  Colors.blue,
-                  Colors.pink,
-                  Colors.orange,
-                  Colors.purple
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );

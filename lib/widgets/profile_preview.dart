@@ -82,14 +82,11 @@ class ProfilePreview extends StatelessWidget {
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white,
-                        width: 2,
-                      ),
+                      color: Colors.white30,
                     ),
                     child: Image.asset(
                       equippedItems['뱃지']!.imageAsset,
-                      height: 60,
+                      height: 40,
                     ),
                   ),
                 ),
