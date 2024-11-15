@@ -34,6 +34,8 @@ flutter:
     - assets/badges/
     - assets/characters/
     - assets/chat_bg.png
+    - assets/image.png
+
 
   # Uncomment and list assets if you have any images or other assets to include
   # assets:
