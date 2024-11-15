@@ -20,7 +20,7 @@ class Challenge {
   int currentCigarettes = 0;
   int daysSinceQuit = 0;
   bool isUnlocked = false;
-  bool isNotified = false; // 알림이 한 번만 표시되도록 제어하는 속성 추가
+  bool isNotified = false;
 
   Challenge({
     required this.id,
@@ -37,14 +37,12 @@ class Challenge {
     required this.pointsReward,
   });
 
-  // 절약 금액과 개비 수 및 경과 날짜 계산
   void updateProgress(int cigarettePrice, int cigarettesPerDay, DateTime quitDate) {
     daysSinceQuit = DateTime.now().difference(quitDate).inDays;
     currentCigarettes = daysSinceQuit * cigarettesPerDay;
     currentSavings = (currentCigarettes ~/ 20) * cigarettePrice;
   }
 
-  // 도전 과제의 완료 여부
   bool get isCompleted {
     if (requiredDays > 0) {
       return daysSinceQuit >= requiredDays;
