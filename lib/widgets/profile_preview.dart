@@ -89,7 +89,7 @@ class ProfilePreview extends StatelessWidget {
                     ),
                     child: Image.asset(
                       equippedItems['뱃지']!.imageAsset,
-                      height: 40,
+                      height: 60,
                     ),
                   ),
                 ),
