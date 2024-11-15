@@ -1,19 +1,21 @@
 name: letsgo
-description: "A new Flutter project."
+description: "A new Flutter project with Gemini AI integration."
 publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.5.4
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  shared_preferences: ^2.1.1
-  intl: ^0.18.0
-  provider: ^6.1.2
+  http: ^1.2.2 # For HTTP requests to Gemini API
+  provider: ^6.1.2 # For state management
+  intl: ^0.18.0 # For date and currency formatting
+  shared_preferences: ^2.1.1 # For storing user settings locally
+
 
 dev_dependencies:
   flutter_test:
@@ -22,3 +24,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Uncomment and list assets if you have any images or other assets to include
+  # assets:
+  #   - images/

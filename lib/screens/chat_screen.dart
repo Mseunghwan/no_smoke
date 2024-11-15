@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/gemini_service.dart';
 import '../models/chat_message.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -12,34 +13,69 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   final List<ChatMessage> _messages = [];
+  bool _isTyping = false;
 
   @override
-  void dispose() {
-    _messageController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _sendInitialMessage();
   }
 
-  void _sendMessage(String text) {
+  Future<void> _sendInitialMessage() async {
+    final prompt = GeminiService.getSmokeFreeTips(widget.smokeFreeHours);
+    setState(() => _isTyping = true);
+
+    try {
+      final response = await GeminiService.getResponse(prompt);
+      setState(() {
+        _messages.add(ChatMessage(text: response, isUser: false));
+        _isTyping = false;
+      });
+      _scrollToBottom();
+    } catch (e) {
+      setState(() => _isTyping = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('초기 메시지 로드 중 오류: $e')),
+      );
+    }
+  }
+
+  Future<void> _sendMessage(String text) async {
     if (text.trim().isEmpty) return;
 
     setState(() {
       _messages.add(ChatMessage(text: text, isUser: true));
-      _messages.add(ChatMessage(text: _generateAIResponse(text), isUser: false));
+      _isTyping = true;
     });
-
     _messageController.clear();
+
+    try {
+      final response = await GeminiService.getResponse(text);
+      setState(() {
+        _messages.add(ChatMessage(text: response, isUser: false));
+        _isTyping = false;
+      });
+      _scrollToBottom();
+    } catch (e) {
+      setState(() => _isTyping = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('메시지 전송 중 오류: $e')),
+      );
+    }
   }
 
-  String _generateAIResponse(String userMessage) {
-    // Simple AI response logic for demonstration
-    if (userMessage.contains('금연')) {
-      return '금연 중이시군요! 응원합니다. 꾸준히 해내시면 더 건강한 삶이 기다리고 있어요!';
-    } else if (userMessage.contains('스트레스')) {
-      return '스트레스를 줄이는 방법으로 심호흡, 산책, 그리고 음악 감상이 좋아요!';
-    } else {
-      return '좋은 질문이에요! 금연 중인 지금, 무엇이든 물어보세요.';
-    }
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   @override
@@ -52,6 +88,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: ListView.builder(
+              controller: _scrollController,
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final message = _messages[index];
@@ -66,13 +103,20 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     child: Text(
                       message.text,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(
+                        color: message.isUser ? Colors.white : Colors.black,
+                      ),
                     ),
                   ),
                 );
               },
             ),
           ),
+          if (_isTyping)
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: CircularProgressIndicator(),
+            ),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(
