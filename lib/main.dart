@@ -1,37 +1,39 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+import 'package:provider/provider.dart';
+import 'provider/profile_provider.dart';
 import 'screens/home_screen.dart';
-import 'screens/onboarding_screen.dart';
 import 'models/user_settings.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  final prefs = await SharedPreferences.getInstance();
-  final userSettingsString = prefs.getString('userSettings');
-  final userSettings = userSettingsString != null
-      ? UserSettings.fromJson(jsonDecode(userSettingsString))
-      : null;
-
-  runApp(MyApp(userSettings: userSettings));
+void main() {
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ProfileProvider()),
+      ],
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
-  final UserSettings? userSettings;
-
-  const MyApp({Key? key, this.userSettings}) : super(key: key);
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '금연 도우미',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.light(),
-      darkTheme: ThemeData.dark(),
-      home: userSettings == null
-          ? OnboardingScreen() // const 제거
-          : HomeScreen(settings: userSettings!), // Nullable 처리
+      title: 'LetsGo',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: HomeScreen(
+        settings: UserSettings(
+          nickname: '사용자',
+          quitDate: DateTime.now().subtract(const Duration(days: 30)),
+          cigarettesPerDay: 10,
+          cigarettePrice: 4500,
+          cigaretteType: '연초',
+          goal: '건강한 삶',
+          targetDate: DateTime.now().add(const Duration(days: 30)),
+        ),
+      ),
     );
   }
 }
