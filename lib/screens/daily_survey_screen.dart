@@ -348,7 +348,7 @@ class _DailySurveyScreenState extends State<DailySurveyScreen> {
 
     // 성공 메시지 표시
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('오늘의 설문이 저장되었습니다. 30포인트를 획득하셨습니다!')),
+      const SnackBar(content: Text('오늘의 설문이 저장되었습니다.')),
     );
 
     Navigator.pop(context);
