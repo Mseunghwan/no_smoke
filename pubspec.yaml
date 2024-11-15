@@ -21,6 +21,7 @@ dependencies:
   health: ^11.1.0  # 업데이트된 버전
   win32: ^5.0.0
   device_info_plus: ^10.1.2
+  awesome_notifications: ^0.8.2
 
 
 
