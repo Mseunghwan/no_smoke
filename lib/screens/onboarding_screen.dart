@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -14,156 +15,193 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _pageController = PageController();
   final _nicknameController = TextEditingController();
   final _smokingAmountController = TextEditingController();
   final _goalController = TextEditingController();
+
   DateTime? _quitDate;
-  DateTime? _targetDate;
+  DateTime? _targetDate; // 목표일자 추가
+  String _nickname = '';
+  String _cigaretteType = '연초';
+  int _cigarettesPerDay = 0;
+  String? _goal;
+  int _currentPage = 0;
+
+  final List<CigaretteType> _cigaretteTypes = [
+    CigaretteType(
+      name: '연초',
+      description: '일반 담배',
+      icon: Icons.smoking_rooms,
+    ),
+    CigaretteType(
+      name: '궐련형 전자담배',
+      description: '아이코스, 릴 등',
+      icon: Icons.battery_charging_full,
+    ),
+    CigaretteType(
+      name: '액상형 전자담배',
+      description: '쥴, 릴베이퍼 등',
+      icon: Icons.waves,
+    ),
+    CigaretteType(
+      name: '기타',
+      description: '파이프 등',
+      icon: Icons.more_horiz,
+    ),
+  ];
+
+  int _currentTypeIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _nicknameController.addListener(() {
+      setState(() {
+        _nickname = _nicknameController.text;
+      });
+    });
+
+    _smokingAmountController.addListener(() {
+      if (_smokingAmountController.text.isNotEmpty) {
+        setState(() {
+          _cigarettesPerDay = int.parse(_smokingAmountController.text);
+        });
+      }
+    });
+
+    _goalController.addListener(() {
+      setState(() {
+        _goal = _goalController.text;
+      });
+    });
+  }
 
   @override
   void dispose() {
     _nicknameController.dispose();
     _smokingAmountController.dispose();
     _goalController.dispose();
+    _pageController.dispose();
     super.dispose();
-  }
-
-  Future<void> _submitForm() async {
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
-
-      if (_quitDate == null || _targetDate == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('필수 정보를 입력해주세요')),
-        );
-        print("필수 값 누락: _quitDate 또는 _targetDate가 null");
-        return;
-      }
-
-      final settings = UserSettings(
-        nickname: _nicknameController.text.trim(),
-        cigaretteType: "연초", // 고정값
-        cigarettesPerDay: int.tryParse(_smokingAmountController.text) ?? 0,
-        quitDate: _quitDate!,
-        goal: _goalController.text.trim(),
-        targetDate: _targetDate!,
-        cigarettePrice: 4500, // 고정값
-      );
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('userSettings', jsonEncode(settings.toJson()));
-
-      if (!mounted) return;
-
-      print("HomeScreen으로 이동: $settings");
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HomeScreen(settings: settings),
-        ),
-      );
-    } else {
-      print("폼 유효성 검사 실패");
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('금연 설정')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      body: SafeArea(
         child: Form(
           key: _formKey,
-          child: ListView(
+          child: PageView(
+            controller: _pageController,
+            physics: const NeverScrollableScrollPhysics(),
+            onPageChanged: (int page) {
+              setState(() {
+                _currentPage = page;
+              });
+            },
             children: [
-              TextFormField(
-                controller: _nicknameController,
-                decoration: const InputDecoration(labelText: '닉네임'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '닉네임을 입력해주세요';
-                  }
-                  return null;
-                },
+              _buildNicknamePage(),
+              _buildCigaretteTypePage(),
+              _buildSmokingAmountPage(),
+              _buildQuitDatePage(),
+              _buildGoalPage(),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: _buildBottomNavigation(),
+    );
+  }
+
+  Widget _buildNicknamePage() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '반갑습니다!',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '금연을 결심하신 것을 축하드립니다.',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          const SizedBox(height: 32),
+          TextFormField(
+            controller: _nicknameController,
+            decoration: const InputDecoration(
+              labelText: '닉네임',
+              hintText: '사용하실 닉네임을 입력해주세요',
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return '닉네임을 입력해주세요';
+              }
+              return null;
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCigaretteTypePage() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '어떤 담배를 피우시나요?',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 32),
+          SizedBox(
+            height: 300,
+            child: PageView.builder(
+              itemCount: _cigaretteTypes.length,
+              controller: PageController(viewportFraction: 0.8),
+              onPageChanged: (int index) {
+                setState(() {
+                  _currentTypeIndex = index;
+                  _cigaretteType = _cigaretteTypes[index].name;
+                });
+              },
+              itemBuilder: (_, i) => _buildCigaretteTypeItem(i),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCigaretteTypeItem(int index) {
+    return Transform.scale(
+      scale: index == _currentTypeIndex ? 1 : 0.9,
+      child: Card(
+        elevation: index == _currentTypeIndex ? 8 : 2,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _cigaretteTypes[index].icon,
+                size: 64,
+                color: Theme.of(context).primaryColor,
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _smokingAmountController,
-                decoration: const InputDecoration(
-                  labelText: '하루 흡연량',
-                  suffixText: '개비',
-                ),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '흡연량을 입력해주세요';
-                  }
-                  if (int.tryParse(value) == null || int.parse(value) <= 0) {
-                    return '유효한 숫자를 입력해주세요';
-                  }
-                  return null;
-                },
+              Text(
+                _cigaretteTypes[index].name,
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _goalController,
-                decoration: const InputDecoration(labelText: '목표'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '목표를 입력해주세요';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: DateTime.now(),
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime(2100),
-                  );
-                  if (picked != null) {
-                    setState(() {
-                      _quitDate = picked;
-                    });
-                  }
-                },
-                icon: const Icon(Icons.calendar_today),
-                label: Text(
-                  _quitDate == null
-                      ? '금연 시작일 선택'
-                      : DateFormat('yyyy-MM-dd').format(_quitDate!),
-                ),
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: DateTime.now(),
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime(2100),
-                  );
-                  if (picked != null) {
-                    setState(() {
-                      _targetDate = picked;
-                    });
-                  }
-                },
-                icon: const Icon(Icons.calendar_today),
-                label: Text(
-                  _targetDate == null
-                      ? '목표일 선택'
-                      : DateFormat('yyyy-MM-dd').format(_targetDate!),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _submitForm,
-                child: const Text('설정 완료'),
+              const SizedBox(height: 8),
+              Text(
+                _cigaretteTypes[index].description,
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
           ),
@@ -171,4 +209,228 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     );
   }
+
+  Widget _buildSmokingAmountPage() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '하루에 몇 개비를 피우시나요?',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 32),
+          TextFormField(
+            controller: _smokingAmountController,
+            decoration: const InputDecoration(
+              labelText: '하루 흡연량',
+              suffixText: '개비',
+            ),
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(2),
+            ],
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return '하루 흡연량을 입력해주세요';
+              }
+              final number = int.tryParse(value);
+              if (number == null || number <= 0 || number > 99) {
+                return '1~99 사이의 숫자를 입력해주세요';
+              }
+              return null;
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuitDatePage() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '언제부터 시작하시나요?',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 32),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final DateTime? picked = await showDatePicker(
+                context: context,
+                initialDate: DateTime.now(),
+                firstDate: DateTime(2020),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked != null) {
+                setState(() {
+                  _quitDate = picked;
+                });
+              }
+            },
+            icon: const Icon(Icons.calendar_today),
+            label: Text(
+              _quitDate == null
+                  ? '날짜 선택하기'
+                  : DateFormat('yyyy년 MM월 dd일').format(_quitDate!),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoalPage() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '금연 목표를 설정해주세요',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _goalController,
+            decoration: const InputDecoration(
+              labelText: '목표',
+              hintText: '예: 가족들과 건강하게 지내기',
+            ),
+            maxLines: 1,
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final DateTime? picked = await showDatePicker(
+                context: context,
+                initialDate: DateTime.now(),
+                firstDate: DateTime(2020),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked != null) {
+                setState(() {
+                  _targetDate = picked;
+                });
+              }
+            },
+            icon: const Icon(Icons.calendar_today),
+            label: Text(
+              _targetDate == null
+                  ? '목표일자 선택하기'
+                  : DateFormat('yyyy년 MM월 dd일').format(_targetDate!),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomNavigation() {
+    bool canProceed = false;
+
+    switch (_currentPage) {
+      case 0:
+        canProceed = _nicknameController.text.isNotEmpty;
+        break;
+      case 1:
+        canProceed = true;
+        break;
+      case 2:
+        canProceed = _smokingAmountController.text.isNotEmpty;
+        break;
+      case 3:
+        canProceed = _quitDate != null;
+        break;
+      case 4:
+        canProceed = _goalController.text.isNotEmpty && _targetDate != null;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          if (_currentPage > 0)
+            TextButton(
+              onPressed: () {
+                _pageController.previousPage(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              },
+              child: const Text('이전'),
+            )
+          else
+            const SizedBox(width: 80),
+          Text('${_currentPage + 1}/5'),
+          TextButton(
+            onPressed: _currentPage == 4
+                ? (_goalController.text.isNotEmpty ? _submitForm : null)
+                : () {
+              _pageController.nextPage(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+            },
+            child: Text(_currentPage == 4 ? '시작하기' : '다음'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _submitForm() async {
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+
+      if (_quitDate == null || _targetDate == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('필수 정보를 입력해주세요')),
+        );
+        return;
+      }
+
+      final settings = UserSettings(
+        quitDate: _quitDate!,
+        nickname: _nicknameController.text.trim(),
+        cigaretteType: _cigaretteType,
+        cigarettesPerDay: int.parse(_smokingAmountController.text),
+        cigarettePrice: 4500,
+        goal: _goalController.text.trim(),
+        targetDate: _targetDate!, // 수정 완료
+      );
+
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userSettings', jsonEncode(settings.toJson()));
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HomeScreen(settings: settings),
+        ),
+      );
+    }
+  }
+}
+
+class CigaretteType {
+  final String name;
+  final String description;
+  final IconData icon;
+
+  CigaretteType({
+    required this.name,
+    required this.description,
+    required this.icon,
+  });
 }
