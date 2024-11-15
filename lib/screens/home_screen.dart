@@ -15,6 +15,7 @@ import 'challenge_screen.dart';
 import 'chat_screen.dart';
 import 'daily_survey_screen.dart';
 import '../models/daily_survey.dart';
+import 'health_status_screen.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -36,6 +37,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   Map<String, ProfileItem> _equippedItems = {};
+  List<DailySurvey> _surveys = [];
 
   Future<List<DailySurvey>> _loadSurveys() async {
     final prefs = await SharedPreferences.getInstance();
@@ -70,7 +72,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     // ProfileProvider의 상태 변경을 구독
     context.read<ProfileProvider>().addListener(_onProfileProviderChanged);
-  }
+
+    _loadSurveys().then((surveys) {
+      setState(() {
+        _surveys = surveys;
+      });
+    });
+}
 
   @override
   void dispose() {
@@ -152,6 +160,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             savedMoney: _calculateSavedMoney(),
             savedCigarettes: _calculateSavedCigarettes(),
             consecutiveDays: DateTime.now().difference(widget.settings.quitDate).inDays,
+          ),
+        );
+        break;
+      case 3:  // 건강 상태 화면으로 이동
+        _navigateWithAnimation(
+          HealthStatusScreen(
+            settings: widget.settings,
+            surveys: _surveys,
           ),
         );
         break;
