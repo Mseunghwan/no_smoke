@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
+import 'screens/onboarding_screen.dart';
+
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
   runApp(MyApp());
 }
 
@@ -14,7 +15,11 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData.light(),
       darkTheme: ThemeData.dark(),
-      home: HomeScreen(), // HomeScreen 연결
+      initialRoute: '/',
+      routes: {
+        '/': (context) => OnboardingScreen(), // 시작 화면
+        '/home': (context) => HomeScreen(), // HomeScreen 연결
+      },
     );
   }
 }
