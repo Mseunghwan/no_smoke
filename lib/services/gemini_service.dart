@@ -1,9 +1,10 @@
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class GeminiService {
   static final model = GenerativeModel(
     model: 'gemini-pro',
-    apiKey: 'AIzaSyAZl0G5h4D0USdMAS0joRCJ_ef_mRfhTX0', // 여기에 실제 API 키를 입력하세요.
+    apiKey: dotenv.env['GEMINI_SERVICE_KEY'] ?? '', // 여기에 실제 API 키를 입력하세요.
   );
 
   static Future<String> getResponse(String prompt) async {
