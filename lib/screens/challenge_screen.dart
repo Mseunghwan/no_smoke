@@ -3,9 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import '../models/challenge.dart';
 import '../models/user_settings.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:confetti/confetti.dart';
-import 'dart:math' as math;
 import 'dart:math' show min;
 
 class ChallengeScreen extends StatefulWidget {
@@ -14,6 +12,7 @@ class ChallengeScreen extends StatefulWidget {
   final int savedMoney;
   final int savedCigarettes;
   final int consecutiveDays;
+  final int currentPoints; // 새로 추가
 
   ChallengeScreen({
     required this.userSettings,
@@ -21,6 +20,7 @@ class ChallengeScreen extends StatefulWidget {
     required this.savedMoney,
     required this.savedCigarettes,
     required this.consecutiveDays,
+    required this.currentPoints, // 새로 추가
   });
 
   @override
@@ -29,11 +29,11 @@ class ChallengeScreen extends StatefulWidget {
 
 class _ChallengeScreenState extends State<ChallengeScreen>
     with TickerProviderStateMixin {
-  List<Challenge> challenges = [];
-  late SharedPreferences prefs;
-  late TabController _tabController;
-  late PageController _pageController;
-  late ConfettiController _confettiController;
+  List<Challenge> challenges = []; // 도전과제 목록
+  late SharedPreferences prefs; // 로컬 저장소 (SharedPreferences)
+  late ConfettiController _confettiController; // 축하 효과 컨트롤러
+  bool isInitialized = false;
+  int totalPointsEarned = 0;
   int _selectedCategory = 0;
 
   final categories = [
@@ -45,14 +45,77 @@ class _ChallengeScreenState extends State<ChallengeScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: categories.length, vsync: this);
-    _pageController = PageController(viewportFraction: 0.85);
     _confettiController = ConfettiController(duration: Duration(seconds: 1));
-    initPrefs();
+    _initializeScreen();
   }
 
-  Future<void> initPrefs() async {
+  Future<void> _initializeScreen() async {
     prefs = await SharedPreferences.getInstance();
+    challenges = getChallenges();
+
+    for (var challenge in challenges) {
+      challenge.updateProgress(
+        widget.userSettings.cigarettePrice,
+        widget.userSettings.cigarettesPerDay,
+        widget.userSettings.quitDate,
+      );
+    }
+
+    await loadUnlockedStatus();
+    setState(() {
+      isInitialized = true;
+    });
+    await updateChallenges();
+  }
+
+
+  // 도전과제 해제 상태 로딩 (보상 지급 여부 포함)
+  Future<void> loadUnlockedStatus() async {
+    for (var challenge in challenges) {
+      final String challengeId = challenge.id;
+      challenge.isUnlocked = prefs.getBool('unlocked_$challengeId') ?? false;
+      challenge.isNotified = prefs.getBool('rewarded_$challengeId') ?? false;
+    }
+  }
+
+  // 도전과제 진행 상황을 업데이트하고 보상 지급을 처리하는 함수
+  Future<void> updateChallenges() async {
+    bool anyRewardsGiven = false;
+
+    for (var challenge in challenges) {
+      final String challengeId = challenge.id;
+
+      challenge.updateProgress(
+        widget.userSettings.cigarettePrice,
+        widget.userSettings.cigarettesPerDay,
+        widget.userSettings.quitDate,
+      );
+
+      if (challenge.isCompleted && !challenge.isUnlocked) {
+        challenge.isUnlocked = true;
+        await prefs.setBool('unlocked_$challengeId', true);
+
+        if (!challenge.isNotified) {
+          challenge.isNotified = true;
+          await prefs.setBool('rewarded_$challengeId', true);
+          setState(() {
+            totalPointsEarned += challenge.pointsReward;
+          });
+          await widget.onPointsEarned(challenge.pointsReward);
+          anyRewardsGiven = true;
+        }
+      }
+    }
+
+    if (anyRewardsGiven) {
+      _confettiController.play();
+    }
+  }
+
+
+  // SharedPreferences 초기화 및 도전과제 로딩
+  Future<void> initPrefs() async {
+    prefs = await SharedPreferences.getInstance(); // 로컬 저장소 인스턴스 가져오기
 
     // 모든 challenge 상태 초기화
     for (var key in prefs.getKeys()) {
@@ -61,7 +124,7 @@ class _ChallengeScreenState extends State<ChallengeScreen>
       }
     }
 
-    challenges = getChallenges();
+    challenges = getChallenges(); // 도전과제 리스트 불러오기
     for (var challenge in challenges) {
       challenge.updateProgress(
         widget.userSettings.cigarettePrice,
@@ -69,8 +132,8 @@ class _ChallengeScreenState extends State<ChallengeScreen>
         widget.userSettings.quitDate,
       );
     }
-    loadUnlockedStatus();
-    updateChallenges();
+    loadUnlockedStatus(); // 저장된 도전과제 해제 상태 불러오기
+    updateChallenges(); // 도전과제 진행 상태 업데이트
   }
 
   Widget _buildCategorySelector() {
@@ -89,11 +152,6 @@ class _ChallengeScreenState extends State<ChallengeScreen>
               onTap: () {
                 setState(() {
                   _selectedCategory = index;
-                  _pageController.animateToPage(
-                    0,
-                    duration: Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                  );
                 });
               },
               child: Container(
@@ -503,7 +561,6 @@ class _ChallengeScreenState extends State<ChallengeScreen>
               _buildCategorySelector(),
               Expanded(
                 child: PageView.builder(
-                  controller: _pageController,
                   itemCount: allCategoryChallenges[_selectedCategory].length,
                   itemBuilder: (context, index) {
                     return LayoutBuilder(
@@ -527,46 +584,18 @@ class _ChallengeScreenState extends State<ChallengeScreen>
       ),
     );
   }
-
   @override
   void dispose() {
-    _tabController.dispose();
-    _pageController.dispose();
+    if (totalPointsEarned > 0) {
+      Navigator.pop(context, widget.currentPoints + totalPointsEarned);
+    } else {
+      Navigator.pop(context, widget.currentPoints);
+    }
     _confettiController.dispose();
     super.dispose();
   }
 
-  void loadUnlockedStatus() {
-    for (var challenge in challenges) {
-      challenge.isUnlocked = prefs.getBool(challenge.id) ?? false;
-      challenge.isNotified = challenge.isUnlocked;
-    }
-  }
-
-  void updateChallenges() {
-    setState(() {
-      for (var challenge in challenges) {
-        challenge.updateProgress(
-          widget.userSettings.cigarettePrice,
-          widget.userSettings.cigarettesPerDay,
-          widget.userSettings.quitDate,
-        );
-
-        if (challenge.isCompleted && !challenge.isUnlocked) {
-          challenge.isUnlocked = true;
-          prefs.setBool(challenge.id, true);
-
-          if (!challenge.isNotified) {
-            challenge.isNotified = true;
-            widget.onPointsEarned(challenge.pointsReward);
-            _confettiController.play();
-          }
-        }
-      }
-    });
-  }
-
-  String _getProgressText(Challenge challenge) {
+String _getProgressText(Challenge challenge) {
     if (challenge.requiredDays > 0) {
       return '${min(challenge.daysSinceQuit, challenge.requiredDays)} / ${challenge.requiredDays}일';
     } else if (challenge.requiredCigarettes > 0) {

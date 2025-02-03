@@ -38,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int _selectedIndex = 0;
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
+  late SharedPreferences prefs;
   Map<String, ProfileItem> _equippedItems = {};
 
   Future<List<DailySurvey>> _loadSurveys() async {
@@ -52,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _calculatePoints();
+    _initializePrefs();
     _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
       _calculatePoints();
     });
@@ -73,6 +74,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     // ProfileProvider의 상태 변경을 구독
     context.read<ProfileProvider>().addListener(_onProfileProviderChanged);
+  }
+
+  Future<void> _initializePrefs() async {
+    prefs = await SharedPreferences.getInstance();
+    _loadPoints();
+  }
+
+  void _loadPoints() {
+    setState(() {
+      _points = prefs.getInt('user_points') ?? 0;
+    });
+  }
+
+  Future<void> _updatePoints(int newPoints) async {
+    setState(() {
+      _points = newPoints;
+    });
+    await prefs.setInt('user_points', newPoints);
   }
 
   @override
@@ -110,8 +129,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return (smokeFreeTime.inDays * widget.settings.cigarettesPerDay).floor();
   }
 
-  Future<void> _navigateWithAnimation(Widget screen) async {
-    await Navigator.push(
+  Future<dynamic> _navigateWithAnimation(Widget screen) {
+    return Navigator.push(
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => screen,
@@ -127,10 +146,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         },
       ),
     );
-    setState(() => _selectedIndex = 0);
   }
 
-  void _onItemTapped(int index) async {  // async 추가
+  void _onItemTapped(int index) async {
     if (_selectedIndex == index) return;
 
     setState(() {
@@ -139,28 +157,31 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     switch (index) {
       case 1:
-        _navigateWithAnimation(
+        await _navigateWithAnimation(
           ChatScreen(smokeFreeHours: _points),
         );
         break;
       case 2:
-        _navigateWithAnimation(
+        final result = await _navigateWithAnimation(
           ChallengeScreen(
-            userSettings: widget.settings, // 추가된 부분
-            onPointsEarned: (points) {
-              setState(() {
-                _points += points;
-              });
+            userSettings: widget.settings,
+            onPointsEarned: (points) async {
+              final newPoints = _points + points;
+              await _updatePoints(newPoints);
             },
             savedMoney: _calculateSavedMoney(),
             savedCigarettes: _calculateSavedCigarettes(),
             consecutiveDays: DateTime.now().difference(widget.settings.quitDate).inDays,
+            currentPoints: _points,
           ),
         );
+        if (result != null && result is int) {
+          await _updatePoints(result);
+        }
         break;
       case 3:
-        final surveys = await _loadSurveys();  // 설문 데이터 로드
-        _navigateWithAnimation(
+        final surveys = await _loadSurveys();
+        await _navigateWithAnimation(
           HealthStatusScreen(
             settings: widget.settings,
             surveys: surveys,
@@ -168,6 +189,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         );
         break;
     }
+    setState(() => _selectedIndex = 0);
   }
 
   @override
@@ -308,6 +330,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           targetDate: widget.settings.targetDate, // targetDate도 전달
                         ),
                         const SizedBox(height: 24),
+                        // AchievementCard 부분도 수정
                         achievements.AchievementCard(
                           points: _points,
                           onProfileTap: () {
@@ -315,20 +338,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               ProfileScreen(currentPoints: _points),
                             );
                           },
-                          onChallengeTap: () {
-                            _navigateWithAnimation(
+                          onChallengeTap: () async {
+                            final result = await _navigateWithAnimation(
                               ChallengeScreen(
-                                userSettings: widget.settings, // 추가된 부분
-                                onPointsEarned: (points) {
-                                  setState(() {
-                                    _points += points;
-                                  });
+                                userSettings: widget.settings,
+                                onPointsEarned: (points) async {
+                                  final newPoints = _points + points;
+                                  await _updatePoints(newPoints);
                                 },
                                 savedMoney: _calculateSavedMoney(),
                                 savedCigarettes: _calculateSavedCigarettes(),
                                 consecutiveDays: DateTime.now().difference(widget.settings.quitDate).inDays,
+                                currentPoints: _points,
                               ),
                             );
+                            if (result != null && result is int) {
+                              await _updatePoints(result);
+                            }
                           },
                         ),
                         const SizedBox(height: 24),
