@@ -2,7 +2,7 @@ name: letsgo
 description: "A new Flutter project with Gemini AI integration."
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.0+3
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
