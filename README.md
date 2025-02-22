@@ -16,7 +16,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/Mseunghwan/no_smoke?style=for-the-badge)](https://github.com/Mseunghwan/no_smoke/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-> 🏆 **2024 GDC-KNU Vision Challenge 우수상 수상작**
+> 🏆 2024 GDC-KNU Vision Challenge 우수상 수상작
 
 </div>
 
