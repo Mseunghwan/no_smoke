@@ -5,7 +5,7 @@
 <p align="center">
   <img src="assets/phone.gif" width="300" alt="NoSmoke App Demo"/>
   <br>
-  <em>당신의 새로운 시작을 함께할 스마트한 금연 파트너</em>
+  <em>당신의 새로운 시작을 도와줄 스마트한 금연 파트너</em>
 </p>
 
 ### AI 기반 스마트 금연 도우미
