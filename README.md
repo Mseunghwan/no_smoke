@@ -8,7 +8,7 @@
   <em>당신의 새로운 시작을 도와줄 스마트한 금연 파트너</em>
 </p>
 
-### AI 기반 스마트 금연 도우미
+### AI 스마트 금연 도우미
 
 [![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
 [![Gemini](https://img.shields.io/badge/Gemini_AI-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
