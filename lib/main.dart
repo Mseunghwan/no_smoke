@@ -7,6 +7,9 @@ import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'models/user_settings.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:letsgo/screens/auth_screen.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,16 +40,24 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<Widget> _determineInitialScreen() async {
+    const storage = FlutterSecureStorage();
+    final token = await storage.read(key: 'jwt_token');
+
+    // 토큰이 없으면 로그인 화면으로 보냄
+    if (token == null) {
+      return const AuthScreen();
+    }
+
+    // 토큰이 있으면, 기존처럼 온보딩 정보를 확인
     final prefs = await SharedPreferences.getInstance();
     final userSettingsString = prefs.getString('userSettings');
 
     if (userSettingsString == null) {
-      // Onboarding을 처음 실행
+      // 로그인은 했지만 흡연정보(온보딩)는 등록 안 한 경우
       return const OnboardingScreen();
     } else {
-      // HomeScreen으로 바로 이동
-      final userSettingsMap = jsonDecode(userSettingsString);
-      final userSettings = UserSettings.fromJson(userSettingsMap);
+      // 로그인도, 온보딩도 완료한 경우
+      final userSettings = UserSettings.fromJson(jsonDecode(userSettingsString));
       return HomeScreen(settings: userSettings);
     }
   }

@@ -22,6 +22,8 @@ dependencies:
   device_info_plus: ^10.1.2
   awesome_notifications: ^0.8.2
   flutter_dotenv: ^5.2.1
+  http: ^1.2.1 # API 통신을 위함
+  flutter_secure_storage: ^9.0.0 # JWT 토큰 저장을 위함
 
 
 
