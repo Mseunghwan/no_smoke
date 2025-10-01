@@ -5,10 +5,10 @@
 <p align="center">
   <img src="assets/phone.gif" width="300" alt="NoSmoke App Demo"/>
   <br>
-  <em>당신의 새로운 시작을 함께할 스마트한 금연 파트너</em>
+  <em>당신의 새로운 시작을 도와줄 스마트한 금연 파트너</em>
 </p>
 
-### AI 기반 스마트 금연 도우미
+### AI 스마트 금연 도우미
 
 [![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
 [![Gemini](https://img.shields.io/badge/Gemini_AI-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
@@ -16,7 +16,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/Mseunghwan/no_smoke?style=for-the-badge)](https://github.com/Mseunghwan/no_smoke/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-> 🏆 **2024 GDC-KNU Vision Challenge 우수상 수상작**
+> 🏆 2024 GDC-KNU Vision Challenge 우수상 수상작
 
 </div>
 
