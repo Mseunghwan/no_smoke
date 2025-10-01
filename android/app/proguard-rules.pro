@@ -9,3 +9,5 @@
 # Prevent R8 from removing or optimizing SplitCompatApplication
 -keep class com.google.android.play.core.** { *; }
 -dontwarn com.google.android.play.core.**
+# 디버그 기호 유지 설정 추가
+-keepattributes SourceFile,LineNumberTable

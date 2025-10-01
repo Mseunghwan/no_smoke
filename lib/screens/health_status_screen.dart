@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:health/health.dart';
 import '../models/health_status.dart';
 import '../models/user_settings.dart';
 import '../models/daily_survey.dart';
@@ -24,7 +23,6 @@ class HealthStatusScreen extends StatefulWidget {
 class _HealthStatusScreenState extends State<HealthStatusScreen> {
   late HealthStatus _healthStatus;
   bool _isLoading = true;
-  final health = Health(); // Changed from HealthFactory to Health
 
   int? _heartRate;
   int? _steps;
@@ -79,59 +77,6 @@ class _HealthStatusScreenState extends State<HealthStatusScreen> {
   @override
   void initState() {
     super.initState();
-    _loadHealthData();
-  }
-
-  Future<void> _loadHealthData() async {
-    try {
-      final types = [
-        HealthDataType.HEART_RATE,
-        HealthDataType.STEPS,
-        HealthDataType.BLOOD_OXYGEN,
-      ];
-
-      bool requested = await health.requestAuthorization(types);
-
-      if (requested) {
-        final now = DateTime.now();
-        final yesterday = now.subtract(const Duration(days: 1));
-
-        // 각 타입별로 데이터 요청
-        var heartRateData = await health.getHealthDataFromTypes(
-          types: [HealthDataType.HEART_RATE],
-          startTime: yesterday,
-          endTime: now,
-        );
-
-        var stepsData = await health.getHealthDataFromTypes(
-          types: [HealthDataType.STEPS],
-          startTime: yesterday,
-          endTime: now,
-        );
-
-        var oxygenData = await health.getHealthDataFromTypes(
-          types: [HealthDataType.BLOOD_OXYGEN],
-          startTime: yesterday,
-          endTime: now,
-        );
-
-        if (mounted) {
-          setState(() {
-            _heartRate = heartRateData.isNotEmpty ?
-            (heartRateData.last.value as num).round() : null;
-            _steps = stepsData.isNotEmpty ?
-            (stepsData.last.value as num).round() : null;
-            _oxygenLevel = oxygenData.isNotEmpty ?
-            (oxygenData.last.value as num).toDouble() : null;
-          });
-        }
-      }
-
-      await _loadHealthStatus();
-    } catch (e) {
-      print("Error loading health data: $e");
-      await _loadHealthStatus();
-    }
   }
 
 

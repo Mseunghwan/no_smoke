@@ -35,6 +35,10 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        ndk {
+            debugSymbolLevel 'FULL' // NDK 디버그 심볼 활성화
+        }
     }
 
     signingConfigs {
@@ -53,6 +57,10 @@ android {
             // start of proguard 코드난독화 및 사이즈 축소
             minifyEnabled true // 코드 난독화 및 크기 축소
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+
+            ndk {
+                debugSymbolLevel 'FULL' // NDK 디버그 심볼 활성화
+            }
         }
     }
 }
