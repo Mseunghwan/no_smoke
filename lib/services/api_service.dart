@@ -53,4 +53,44 @@ class ApiService {
   Future<String?> getToken() async {
     return await _storage.read(key: 'jwt_token');
   }
+
+
+  // 인증 헤더 헬퍼 메소드
+  Future<Map<String, String>> _getAuthHeaders() async {
+    final token = await getToken();
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+  }
+
+  // 흡연 정보 등록 API
+  Future<void> saveSmokingInfo({
+    required String cigaretteType,
+    required int dailyConsumption,
+    required DateTime quitDate,
+    required DateTime targetDate,
+    required String quitGoal,
+  }) async {
+    final url = Uri.parse('$_baseUrl/smoking-info');
+    final headers = await _getAuthHeaders(); // 인증 헤더 가져오기
+
+    final response = await http.post(
+      url,
+      headers: headers, // 헤더에 토큰 포함!
+      body: jsonEncode({
+        'cigaretteType': cigaretteType,
+        'dailyConsumption': dailyConsumption,
+        // 백엔드는 LocalDateTime을 기대하므로 ISO 8601 형식으로 변환
+        'quitStartTime': quitDate.toIso8601String(),
+        'targetDate': targetDate.toIso8601String(),
+        'quitGoal': quitGoal,
+      }),
+    );
+
+    if (response.statusCode != 201) { // 201 Created
+      final responseData = jsonDecode(utf8.decode(response.bodyBytes));
+      throw Exception(responseData['message'] ?? '흡연 정보 저장에 실패했습니다.');
+    }
+  }
 }

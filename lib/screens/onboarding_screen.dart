@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/user_settings.dart';
 import 'home_screen.dart';
+import '../services/api_service.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({Key? key}) : super(key: key);
@@ -19,6 +20,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
   final _nicknameController = TextEditingController();
   final _smokingAmountController = TextEditingController();
   final _goalController = TextEditingController();
+  final ApiService _apiService = ApiService();
 
   DateTime? _quitDate;
   DateTime? _targetDate;
@@ -745,36 +747,60 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
       _formKey.currentState!.save();
 
       if (_quitDate == null || _targetDate == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('필수 정보를 입력해주세요'),
-            backgroundColor: Colors.red,
-          ),
-        );
         return;
       }
 
-      final settings = UserSettings(
-        quitDate: _quitDate!,
-        nickname: _nicknameController.text.trim(),
-        cigaretteType: _cigaretteType,
-        cigarettesPerDay: int.parse(_smokingAmountController.text),
-        cigarettePrice: 4500,
-        goal: _goalController.text.trim(),
-        targetDate: _targetDate!,
-      );
+      try {
+        // 로딩 인디케이터 보여주기
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) => Center(child: CircularProgressIndicator()),
+        );
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('userSettings', jsonEncode(settings.toJson()));
+        // 1. 백엔드에 흡연 정보 저장 API 호출
+        await _apiService.saveSmokingInfo(
+          cigaretteType: _cigaretteType,
+          dailyConsumption: int.parse(_smokingAmountController.text),
+          quitDate: _quitDate!,
+          targetDate: _targetDate!,
+          quitGoal: _goalController.text.trim(),
+        );
 
-      if (!mounted) return;
+        // 2. API 호출 성공 후, 기존처럼 로컬에도 정보 저장
+        final settings = UserSettings(
+          quitDate: _quitDate!,
+          nickname: _nickname, // 닉네임은 이전 화면에서 받아와야 함 (지금은 임시)
+          cigaretteType: _cigaretteType,
+          cigarettesPerDay: int.parse(_smokingAmountController.text),
+          cigarettePrice: 4500,
+          goal: _goalController.text.trim(),
+          targetDate: _targetDate!,
+        );
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HomeScreen(settings: settings),
-        ),
-      );
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('userSettings', jsonEncode(settings.toJson()));
+
+        if (!mounted) return;
+
+        // 3. 홈 화면으로 이동
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => HomeScreen(settings: settings)),
+              (route) => false, // 이전의 모든 화면을 스택에서 제거
+        );
+
+      } catch (e) {
+        // 로딩 인디케이터 닫기
+        Navigator.of(context).pop();
+        // 에러 메시지 표시
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }
