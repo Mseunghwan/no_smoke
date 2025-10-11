@@ -191,6 +191,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             final int savedMoney = data['moneySaved']?.toInt() ?? 0;
             final int savedCigarettes = data['cigarettesNotSmoked']?.toInt() ?? 0;
             final int points = data['points']?.toInt() ?? 0;
+            final bool hasSurveyedToday = data['hasSurveyedToday'] ?? false;
+
 
             return FadeTransition(
               opacity: _fadeAnimation,
@@ -215,29 +217,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             const SizedBox(height: 20),
                             ProfilePreview(
                               points: points,
-                              onProfileTap: () {
-                                _navigateWithAnimation(
-                                  ProfileScreen(currentPoints: points),
-                                );
-                              },
+                              onProfileTap: () => _navigateWithAnimation(ProfileScreen(currentPoints: points)),
                               equippedItems: context.watch<ProfileProvider>().equippedItems,
                             ),
                             const SizedBox(height: 20),
                             DailySurveyCard(
+                              hasCompleted: hasSurveyedToday,
                               onTap: () async {
-                                final result = await _navigateWithAnimation(
-                                  DailySurveyScreen(
-                                    onCigarettesUpdate: (cigarettes) {
-                                      // 이 콜백은 더 이상 사용하지 않지만, 위젯의 요구사항이므로 비워둡니다.
-                                    },
-                                  ),
-                                );
-
-                                // 만약 DailySurveyScreen에서 true를 반환했다면 (저장 성공 시)
-                                if (result == true && mounted) {
-                                  // 대시보드 데이터를 새로고침!
-                                  _loadDashboardData();
-                                }
+                                final result = await _navigateWithAnimation(DailySurveyScreen(onCigarettesUpdate: (_){}));
+                                if (result == true) _loadDashboardData();
                               },
                             ),
                             const SizedBox(height: 24),
@@ -249,25 +237,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             const SizedBox(height: 24),
                             achievements.AchievementCard(
                               points: points,
-                              onProfileTap: () {
-                                _navigateWithAnimation(
-                                  ProfileScreen(currentPoints: points),
-                                );
-                              },
-                              onChallengeTap: () {
-                                _navigateWithAnimation(
-                                  ChallengeScreen(
-                                    userSettings: widget.settings,
-                                    onPointsEarned: (points) {
-                                      _loadDashboardData();
-                                    },
-                                    savedMoney: savedMoney,
-                                    savedCigarettes: savedCigarettes,
-                                    consecutiveDays: data['currentStreak']?.toInt() ?? 0,
-                                    currentPoints: points,
-                                  ),
-                                );
-                              },
+                              onProfileTap: () => _navigateWithAnimation(ProfileScreen(currentPoints: points)),
+                              onChallengeTap: () { /* ... */ },
                             ),
                             const SizedBox(height: 24),
                           ],
