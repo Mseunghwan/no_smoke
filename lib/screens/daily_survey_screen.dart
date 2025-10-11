@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/daily_survey.dart';
 import 'dart:convert';
+import '../services/api_service.dart';
 
 class DailySurveyScreen extends StatefulWidget {
   final Function(int) onCigarettesUpdate;  // 피운 담배 개수 업데이트 콜백
@@ -23,6 +24,8 @@ class _DailySurveyScreenState extends State<DailySurveyScreen> {
   String? _stressReason;
   int _urgencyLevel = 3;
   final _noteController = TextEditingController();
+  final ApiService _apiService = ApiService();
+
   final List<String> _stressReasons = [
     '직장/학교 스트레스',
     '대인관계',
@@ -320,43 +323,50 @@ class _DailySurveyScreenState extends State<DailySurveyScreen> {
   Future<void> _saveSurvey() async {
     if (_isSmokeFree == null) return;
 
-    final survey = DailySurvey(
-      date: DateTime.now(),
-      isSmokeFree: _isSmokeFree!,
-      cigarettesSmoked: _isSmokeFree! ? null : _cigarettesSmoked ?? 1,
-      stressLevel: _stressLevel,
-      stressReason: _stressReason,
-      urgencyLevel: _urgencyLevel,
-      note: _noteController.text.trim(),
+    // 로딩 인디케이터 보여주기
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) => const Center(child: CircularProgressIndicator()),
     );
 
-    // SharedPreferences에 저장
-    final prefs = await SharedPreferences.getInstance();
-    final surveys = prefs.getStringList('daily_surveys') ?? [];
-    surveys.add(jsonEncode(survey.toJson()));
-    await prefs.setStringList('daily_surveys', surveys);
+    try {
+      // 1. 백엔드 API 호출
+      await _apiService.saveDailySurvey(
+        isSuccess: _isSmokeFree!,
+        stressLevel: _stressLevel,
+        stressCause: _stressReason,
+        cravingLevel: _urgencyLevel,
+        additionalNotes: _noteController.text.trim(),
+      );
 
-    // 피운 담배 개수 업데이트
-    if (!_isSmokeFree! && _cigarettesSmoked != null) {
-      widget.onCigarettesUpdate(_cigarettesSmoked!);
+      if (!mounted) return;
+
+      // 로딩 인디케이터 닫기
+      Navigator.of(context).pop();
+
+      // 성공 메시지 표시
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('오늘의 설문이 서버에 저장되었습니다.'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+
+      // 홈 화면으로 돌아가면서 true 값을 전달하여 새로고침이 필요함을 알림
+      Navigator.pop(context, true);
+
+    } catch (e) {
+      if (!mounted) return;
+      // 로딩 인디케이터 닫기
+      Navigator.of(context).pop();
+      // 에러 메시지 표시
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
-
-    final currentPoints = prefs.getInt('totalPoints') ?? 0;
-    await prefs.setInt('totalPoints', currentPoints + 30);
-
-    if (!mounted) return;
-
-    // 성공 메시지 표시
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('오늘의 설문이 저장되었습니다.')),
-    );
-
-    Navigator.pop(context);
-  }
-
-  @override
-  void dispose() {
-    _noteController.dispose();
-    super.dispose();
   }
 }

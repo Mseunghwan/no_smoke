@@ -93,4 +93,51 @@ class ApiService {
       throw Exception(responseData['message'] ?? '흡연 정보 저장에 실패했습니다.');
     }
   }
+
+  // 대시보드 데이터를 백엔드에서 불러와서 적용
+  Future<Map<String, dynamic>> getDashboardData() async {
+    final url = Uri.parse('$_baseUrl/dashboard');
+    final headers = await _getAuthHeaders(); // 인증 헤더 가져오기
+
+    final response = await http.get(
+      url,
+      headers: headers, // 헤더에 토큰 포함
+    );
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(utf8.decode(response.bodyBytes));
+      return responseData['data']; // 실제 데이터는 'data' 키 안에 있습니다.
+    } else {
+      throw Exception('대시보드 정보 로딩에 실패했습니다.');
+    }
+  }
+
+  // 일일 설문 등록 API
+  Future<void> saveDailySurvey({
+    required bool isSuccess,
+    required int stressLevel,
+    String? stressCause,
+    required int cravingLevel,
+    String? additionalNotes,
+  }) async {
+    final url = Uri.parse('$_baseUrl/surveys');
+    final headers = await _getAuthHeaders(); // 인증 헤더 가져오기
+
+    final response = await http.post(
+      url,
+      headers: headers,
+      body: jsonEncode({
+        'success': isSuccess,
+        'stressLevel': stressLevel,
+        'stressCause': stressCause,
+        'cravingLevel': cravingLevel,
+        'additionalNotes': additionalNotes,
+      }),
+    );
+
+    if (response.statusCode != 201) { // 201 Created
+      final responseData = jsonDecode(utf8.decode(response.bodyBytes));
+      throw Exception(responseData['message'] ?? '설문 저장에 실패했습니다.');
+    }
+  }
 }

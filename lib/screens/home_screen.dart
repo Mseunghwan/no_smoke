@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/user_settings.dart';
 import '../provider/profile_provider.dart';
-import '../models/profile_item.dart';
 import '../widgets/goal_card.dart' as goals;
 import '../widgets/profile_preview.dart';
 import '../widgets/stats_card.dart';
@@ -18,6 +16,8 @@ import 'chat_screen.dart';
 import 'daily_survey_screen.dart';
 import 'health_status_screen.dart';
 import '../models/daily_survey.dart';
+import '../services/api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -33,30 +33,18 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
-  int _points = 0;
-  Timer? _timer;
   int _selectedIndex = 0;
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
-  late SharedPreferences prefs;
-  Map<String, ProfileItem> _equippedItems = {};
 
-  Future<List<DailySurvey>> _loadSurveys() async {
-    final prefs = await SharedPreferences.getInstance();
-    final surveys = prefs.getStringList('daily_surveys') ?? [];
-
-    return surveys.map((surveyJson) {
-      return DailySurvey.fromJson(jsonDecode(surveyJson));
-    }).toList();
-  }
+  // API 데이터 관리 변수
+  final ApiService _apiService = ApiService();
+  Future<Map<String, dynamic>>? _dashboardData;
 
   @override
   void initState() {
     super.initState();
-    _initializePrefs();
-    _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
-      _calculatePoints();
-    });
+    _loadDashboardData();
 
     _controller = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -71,136 +59,43 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
 
     _controller.forward();
-
-    // ProfileProvider의 상태 변경을 구독
     context.read<ProfileProvider>().addListener(_onProfileProviderChanged);
   }
 
-  Future<void> _initializePrefs() async {
-    prefs = await SharedPreferences.getInstance();
-    _loadPoints();
-  }
-
-  void _loadPoints() {
+  void _loadDashboardData() {
     setState(() {
-      _points = prefs.getInt('user_points') ?? 0;
+      _dashboardData = _apiService.getDashboardData();
     });
   }
 
-  Future<void> _updatePoints(int newPoints) async {
-    setState(() {
-      _points = newPoints;
-    });
-    await prefs.setInt('user_points', newPoints);
+  // 로컬에 저장된 설문 데이터를 불러오는 임시 함수
+  // TODO: 추후 이 부분도 서버 API로 대체해야 합니다.
+  Future<List<DailySurvey>> _loadSurveys() async {
+    final prefs = await SharedPreferences.getInstance();
+    final surveys = prefs.getStringList('daily_surveys') ?? [];
+
+    return surveys.map((surveyJson) {
+      return DailySurvey.fromJson(jsonDecode(surveyJson));
+    }).toList();
   }
+
 
   @override
   void dispose() {
-    // ProfileProvider의 상태 변경 구독 해제
     context.read<ProfileProvider>().removeListener(_onProfileProviderChanged);
-    _timer?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
   void _onProfileProviderChanged() {
-    setState(() {
-      // ProfileProvider의 equippedItems 상태를 업데이트
-      _equippedItems = context.read<ProfileProvider>().equippedItems;
-    });
-  }
-
-  void _calculatePoints() {
-    final Duration smokeFreeTime = DateTime.now().difference(widget.settings.quitDate);
-    setState(() {
-      _points = smokeFreeTime.inHours;
-    });
-  }
-
-  int _calculateSavedMoney() {
-    final Duration smokeFreeTime = DateTime.now().difference(widget.settings.quitDate);
-    final double cigarettePacksPerDay = widget.settings.cigarettesPerDay / 20.0;
-    final int totalDays = smokeFreeTime.inDays;
-    return (cigarettePacksPerDay * widget.settings.cigarettePrice * totalDays).floor();
-  }
-
-  int _calculateSavedCigarettes() {
-    final Duration smokeFreeTime = DateTime.now().difference(widget.settings.quitDate);
-    return (smokeFreeTime.inDays * widget.settings.cigarettesPerDay).floor();
-  }
-
-  Future<dynamic> _navigateWithAnimation(Widget screen) {
-    return Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => screen,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(1.0, 0.0);
-          const end = Offset.zero;
-          const curve = Curves.easeInOutCubic;
-          var tween = Tween(begin: begin, end: end).chain(
-            CurveTween(curve: curve),
-          );
-          var offsetAnimation = animation.drive(tween);
-          return SlideTransition(position: offsetAnimation, child: child);
-        },
-      ),
-    );
-  }
-
-  void _onItemTapped(int index) async {
-    if (_selectedIndex == index) return;
-
-    setState(() {
-      _selectedIndex = index;
-    });
-
-    switch (index) {
-      case 1:
-        await _navigateWithAnimation(
-          ChatScreen(smokeFreeHours: _points),
-        );
-        break;
-      case 2:
-        final result = await _navigateWithAnimation(
-          ChallengeScreen(
-            userSettings: widget.settings,
-            onPointsEarned: (points) async {
-              final newPoints = _points + points;
-              await _updatePoints(newPoints);
-            },
-            savedMoney: _calculateSavedMoney(),
-            savedCigarettes: _calculateSavedCigarettes(),
-            consecutiveDays: DateTime.now().difference(widget.settings.quitDate).inDays,
-            currentPoints: _points,
-          ),
-        );
-        if (result != null && result is int) {
-          await _updatePoints(result);
-        }
-        break;
-      case 3:
-        final surveys = await _loadSurveys();
-        await _navigateWithAnimation(
-          HealthStatusScreen(
-            settings: widget.settings,
-            surveys: surveys,
-          ),
-        );
-        break;
+    // Provider 상태가 변경되면 화면을 다시 그리도록 setState 호출
+    if (mounted) {
+      setState(() {});
     }
-    setState(() => _selectedIndex = 0);
   }
 
   @override
   Widget build(BuildContext context) {
-    final daysSince = DateTime.now().difference(widget.settings.quitDate).inDays;
-    final numberFormat = NumberFormat.currency(
-      symbol: '₩',
-      locale: 'ko_KR',
-      decimalDigits: 0,
-    );
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FE),
       appBar: AppBar(
@@ -226,14 +121,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           ],
         ),
-        actions: [ // 기존 프로필 버튼
+        actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: GestureDetector(
-              onTap: () {
-                _navigateWithAnimation(
-                  ProfileScreen(currentPoints: _points),
-                );
+              onTap: () async {
+                // 데이터를 기다린 후 화면 이동
+                final data = await _dashboardData;
+                if (data != null && mounted) {
+                  _navigateWithAnimation(
+                    ProfileScreen(currentPoints: data['points']?.toInt() ?? 0),
+                  );
+                }
               },
               child: Container(
                 padding: const EdgeInsets.all(8),
@@ -263,109 +162,126 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              const Color(0xFFF8F9FE),
-              Theme.of(context).primaryColor.withOpacity(0.05),
-            ],
-          ),
-        ),
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: RefreshIndicator(
-            onRefresh: () async {
-              _calculatePoints();
-              await Future.delayed(const Duration(milliseconds: 500));
-            },
-            displacement: 20,
-            color: Theme.of(context).primaryColor,
-            backgroundColor: Colors.white,
-            strokeWidth: 3,
-            child: CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 20),
-                        StatsCard(
-                          daysSince: daysSince,
-                          savedMoney: _calculateSavedMoney(),
-                          savedCigarettes: _calculateSavedCigarettes(),
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _dashboardData,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('데이터 로딩 실패: ${snapshot.error}'),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _loadDashboardData,
+                    child: const Text('다시 시도'),
+                  )
+                ],
+              ),
+            );
+          }
+
+          if (snapshot.hasData) {
+            final data = snapshot.data!;
+            final int daysSince = data['quitDays']?.toInt() ?? 0;
+            final int savedMoney = data['moneySaved']?.toInt() ?? 0;
+            final int savedCigarettes = data['cigarettesNotSmoked']?.toInt() ?? 0;
+            final int points = data['points']?.toInt() ?? 0;
+
+            return FadeTransition(
+              opacity: _fadeAnimation,
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  _loadDashboardData();
+                },
+                child: CustomScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 20),
+                            StatsCard(
+                              daysSince: daysSince,
+                              savedMoney: savedMoney,
+                              savedCigarettes: savedCigarettes,
+                            ),
+                            const SizedBox(height: 20),
+                            ProfilePreview(
+                              points: points,
+                              onProfileTap: () {
+                                _navigateWithAnimation(
+                                  ProfileScreen(currentPoints: points),
+                                );
+                              },
+                              equippedItems: context.watch<ProfileProvider>().equippedItems,
+                            ),
+                            const SizedBox(height: 20),
+                            DailySurveyCard(
+                              onTap: () async {
+                                final result = await _navigateWithAnimation(
+                                  DailySurveyScreen(
+                                    onCigarettesUpdate: (cigarettes) {
+                                      // 이 콜백은 더 이상 사용하지 않지만, 위젯의 요구사항이므로 비워둡니다.
+                                    },
+                                  ),
+                                );
+
+                                // 만약 DailySurveyScreen에서 true를 반환했다면 (저장 성공 시)
+                                if (result == true && mounted) {
+                                  // 대시보드 데이터를 새로고침!
+                                  _loadDashboardData();
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 24),
+                            goals.GoalCard(
+                              goal: widget.settings.goal,
+                              quitDate: widget.settings.quitDate,
+                              targetDate: widget.settings.targetDate,
+                            ),
+                            const SizedBox(height: 24),
+                            achievements.AchievementCard(
+                              points: points,
+                              onProfileTap: () {
+                                _navigateWithAnimation(
+                                  ProfileScreen(currentPoints: points),
+                                );
+                              },
+                              onChallengeTap: () {
+                                _navigateWithAnimation(
+                                  ChallengeScreen(
+                                    userSettings: widget.settings,
+                                    onPointsEarned: (points) {
+                                      _loadDashboardData();
+                                    },
+                                    savedMoney: savedMoney,
+                                    savedCigarettes: savedCigarettes,
+                                    consecutiveDays: data['currentStreak']?.toInt() ?? 0,
+                                    currentPoints: points,
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 24),
+                          ],
                         ),
-                        const SizedBox(height: 20),
-                        ProfilePreview(
-                          points: _points,
-                          onProfileTap: () {
-                            _navigateWithAnimation(
-                              ProfileScreen(currentPoints: _points),
-                            );
-                          },
-                          equippedItems: context.watch<ProfileProvider>().equippedItems,
-                        ),
-                        const SizedBox(height: 20),
-                        DailySurveyCard(
-                          onTap: () {
-                            _navigateWithAnimation(
-                              DailySurveyScreen(
-                                onCigarettesUpdate: (cigarettes) {
-                                  setState(() {
-                                    _calculatePoints();
-                                  });
-                                },
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 24),
-                        goals.GoalCard(
-                          goal: widget.settings.goal ?? '목표를 설정해주세요',
-                          quitDate: widget.settings.quitDate, // quitDate를 추가로 전달
-                          targetDate: widget.settings.targetDate, // targetDate도 전달
-                        ),
-                        const SizedBox(height: 24),
-                        // AchievementCard 부분도 수정
-                        achievements.AchievementCard(
-                          points: _points,
-                          onProfileTap: () {
-                            _navigateWithAnimation(
-                              ProfileScreen(currentPoints: _points),
-                            );
-                          },
-                          onChallengeTap: () async {
-                            final result = await _navigateWithAnimation(
-                              ChallengeScreen(
-                                userSettings: widget.settings,
-                                onPointsEarned: (points) async {
-                                  final newPoints = _points + points;
-                                  await _updatePoints(newPoints);
-                                },
-                                savedMoney: _calculateSavedMoney(),
-                                savedCigarettes: _calculateSavedCigarettes(),
-                                consecutiveDays: DateTime.now().difference(widget.settings.quitDate).inDays,
-                                currentPoints: _points,
-                              ),
-                            );
-                            if (result != null && result is int) {
-                              await _updatePoints(result);
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 24),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        ),
+              ),
+            );
+          }
+
+          return const Center(child: Text('데이터가 없습니다.'));
+        },
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -391,25 +307,79 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             currentIndex: _selectedIndex,
             onTap: _onItemTapped,
             items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.home_rounded),
-                label: '홈',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.chat_bubble_rounded),
-                label: '상담',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.emoji_events_rounded),
-                label: '도전',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.health_and_safety_rounded),
-                label: '건강',
-              ),
+              BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: '홈'),
+              BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: '상담'),
+              BottomNavigationBarItem(icon: Icon(Icons.emoji_events_rounded), label: '도전'),
+              BottomNavigationBarItem(icon: Icon(Icons.health_and_safety_rounded), label: '건강'),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _onItemTapped(int index) async {
+    if (_selectedIndex == index) return;
+
+    final data = await _dashboardData;
+    if (data == null) return;
+
+    final int points = data['points']?.toInt() ?? 0;
+    final int savedMoney = data['moneySaved']?.toInt() ?? 0;
+    final int savedCigarettes = data['cigarettesNotSmoked']?.toInt() ?? 0;
+
+    setState(() {
+      _selectedIndex = index;
+    });
+
+    switch (index) {
+      case 1:
+        await _navigateWithAnimation(
+          ChatScreen(smokeFreeHours: data['quitDays']?.toInt() ?? 0),
+        );
+        break;
+      case 2:
+        await _navigateWithAnimation(
+          ChallengeScreen(
+            userSettings: widget.settings,
+            onPointsEarned: (earnedPoints) {
+              _loadDashboardData();
+            },
+            savedMoney: savedMoney,
+            savedCigarettes: savedCigarettes,
+            consecutiveDays: data['currentStreak']?.toInt() ?? 0,
+            currentPoints: points,
+          ),
+        );
+        break;
+      case 3:
+        final surveys = await _loadSurveys();
+        await _navigateWithAnimation(
+          HealthStatusScreen(
+            settings: widget.settings,
+            surveys: surveys,
+          ),
+        );
+        break;
+    }
+    if (mounted) {
+      setState(() => _selectedIndex = 0);
+    }
+  }
+
+  Future<dynamic> _navigateWithAnimation(Widget screen) {
+    return Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          const curve = Curves.easeInOutCubic;
+          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+          return SlideTransition(position: offsetAnimation, child: child);
+        },
       ),
     );
   }
