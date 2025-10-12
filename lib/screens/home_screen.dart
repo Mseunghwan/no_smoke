@@ -126,7 +126,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             padding: const EdgeInsets.only(right: 16.0),
             child: GestureDetector(
               onTap: () async {
-                // 데이터를 기다린 후 화면 이동
                 final data = await _dashboardData;
                 if (data != null && mounted) {
                   _navigateWithAnimation(
@@ -188,18 +187,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           if (snapshot.hasData) {
             final data = snapshot.data!;
             final int daysSince = data['quitDays']?.toInt() ?? 0;
-            final int savedMoney = data['moneySaved']?.toInt() ?? 0;
+            final int savedMoney = data['savedMoney']?.toInt() ?? 0;
             final int savedCigarettes = data['cigarettesNotSmoked']?.toInt() ?? 0;
             final int points = data['points']?.toInt() ?? 0;
             final bool hasSurveyedToday = data['hasSurveyedToday'] ?? false;
 
-
             return FadeTransition(
               opacity: _fadeAnimation,
               child: RefreshIndicator(
-                onRefresh: () async {
-                  _loadDashboardData();
-                },
+                onRefresh: () async => _loadDashboardData(),
                 child: CustomScrollView(
                   physics: const BouncingScrollPhysics(),
                   slivers: [
@@ -238,7 +234,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             achievements.AchievementCard(
                               points: points,
                               onProfileTap: () => _navigateWithAnimation(ProfileScreen(currentPoints: points)),
-                              onChallengeTap: () { /* ... */ },
+                              onChallengeTap: () {
+                                _navigateWithAnimation(
+                                  ChallengeScreen(
+                                    userSettings: widget.settings,
+                                    onPointsEarned: (points) { _loadDashboardData(); },
+                                    savedMoney: savedMoney,
+                                    savedCigarettes: savedCigarettes,
+                                    consecutiveDays: data['currentStreak']?.toInt() ?? 0,
+                                    currentPoints: points,
+                                  ),
+                                );
+                              },
                             ),
                             const SizedBox(height: 24),
                           ],
