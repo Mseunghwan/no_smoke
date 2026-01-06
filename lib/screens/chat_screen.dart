@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import '../services/gemini_service.dart';
+import '../services/api_service.dart';
 import '../models/chat_message.dart';
 
 class ChatScreen extends StatefulWidget {
   final int smokeFreeHours;
-
   const ChatScreen({Key? key, required this.smokeFreeHours}) : super(key: key);
 
   @override
@@ -14,6 +13,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final ApiService _apiService = ApiService(); // ApiService 인스턴스 생성
   final List<ChatMessage> _messages = [];
   bool _isTyping = false;
 
@@ -27,57 +27,36 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _sendInitialMessage();
+    _loadChatHistory(); // 이전 대화 불러오기 (선택) 혹은 첫 인사
   }
 
-  void _sendInitialMessage() async {
-    final prompt = GeminiService.getSmokeFreeTips(widget.smokeFreeHours);
-    setState(() => _isTyping = true);
-
-    try {
-      final response = await GeminiService.getResponse(prompt);
-      if (response.trim().isEmpty) {
-        throw Exception('Empty response');
-      }
-      setState(() {
-        _messages.add(ChatMessage(text: response, isUser: false));
-        _isTyping = false;
-      });
-      _scrollToBottom();
-    } catch (e) {
-      setState(() => _isTyping = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('메시지 전송 중 오류가 발생했습니다. 다시 시도해주세요.'),
-          backgroundColor: darkPurple,
-        ),
-      );
-    }
+  // 초기 로딩: 백엔드에서 이전 대화 내역을 가져오거나, 가벼운 첫 인사를 보냄
+  void _loadChatHistory() async {
+    // 만약 이전 대화를 불러오고 싶다면 ApiService.getChatHistory() 호출 구현
+    // 여기서는 심플하게 스털링이 먼저 말을 거는 효과를 위해 빈 메시지 호출 등을 하거나
+    // UI상으로만 처리할 수 있습니다.
+    // 여기서는 "금연 조언"을 요청하여 첫 말문을 트겠습니다.
+    _sendMessage("금연 중인데 힘이 되는 짧은 한마디 해줘", isInitiatedBySystem: true);
   }
 
-  Future<void> _sendMessage(String text) async {
+  Future<void> _sendMessage(String text, {bool isInitiatedBySystem = false}) async {
     if (text.trim().isEmpty) return;
 
     setState(() {
-      _messages.add(ChatMessage(text: text, isUser: true));
+      // 시스템이 시작한 대화(첫인사)가 아니면 내 말풍선 추가
+      if (!isInitiatedBySystem) {
+        _messages.add(ChatMessage(text: text, isUser: true));
+      }
       _isTyping = true;
     });
-    _messageController.clear();
 
-    final prompt = '''
-user's message: $text
-- 사용자가 짧은 답을 해도 대화를 이어가려는 시도를 해줘
-- 금연을 지지하며, 응원하는 질문이나 추가적인 격려 문장을 덧붙여줘
-- 담배가 낳는 악영향을 대화에 어우러지게 말해줘
-- 사용자가 금연 중이니, 금연을 통해 얻을 수 있는 긍정적인 효과(예: 건강 회복, 경제적 절약 등)를 자연스럽게 대화에 포함해줘
-- 금연을 실패했다고 말할 경우, 비판하지 않고 부드럽게 위로하며 다시 시작할 수 있는 동기를 부여해줘
-- 금연 관련 질문을 할 경우, 간단하고 유익한 정보를 제공하며, 추가적인 조언을 덧붙여줘
-- 대화 도중 사용자의 스트레스를 줄여줄 수 있는 방법(예: 심호흡, 산책 등)을 제안해줘
-''';
-
+    if (!isInitiatedBySystem) _messageController.clear();
+    _scrollToBottom();
 
     try {
-      final response = await GeminiService.getResponse(prompt);
+      // [변경] GeminiService 대신 ApiService 사용
+      final response = await _apiService.chatWithSterling(text);
+
       setState(() {
         _messages.add(ChatMessage(text: response, isUser: false));
         _isTyping = false;
@@ -87,8 +66,8 @@ user's message: $text
       setState(() => _isTyping = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('메시지 전송 중 오류가 발생했습니다.'),
-          backgroundColor: darkPurple,
+          content: Text('스털링과 연결할 수 없습니다.'),
+          backgroundColor: Color(0xFF6D28D9), // darkPurple
         ),
       );
     }

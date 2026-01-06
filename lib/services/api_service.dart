@@ -64,6 +64,69 @@ class ApiService {
     };
   }
 
+  Future<String> _getUserId() async {
+    final userId = await _storage.read(key: 'user_id');
+    if (userId == null) {
+      throw Exception('사용자 정보를 찾을 수 없습니다. 다시 로그인해주세요.');
+    }
+    return userId;
+  }
+
+  // [New] 스털링 챗봇과 대화하기
+  Future<String> chatWithSterling(String message) async {
+    final userId = await _getUserId();
+    final url = Uri.parse('$_baseUrl/monkey/chat/$userId');
+    final headers = await _getAuthHeaders();
+
+    final response = await http.post(
+      url,
+      headers: headers,
+      body: jsonEncode({'message': message}),
+    );
+
+    final responseData = jsonDecode(utf8.decode(response.bodyBytes));
+    if (response.statusCode == 200) {
+      // 백엔드 ApiResponse 구조: { "status": "SUCCESS", "message": "...", "data": "AI 응답 텍스트" }
+      return responseData['data'];
+    } else {
+      throw Exception(responseData['message'] ?? 'AI 응답을 받아오지 못했습니다.');
+    }
+  }
+
+  // [New] 건강 상태 분석 요청
+  Future<String> getHealthAnalysis() async {
+    final userId = await _getUserId();
+    final url = Uri.parse('$_baseUrl/monkey/analysis/$userId');
+    final headers = await _getAuthHeaders();
+
+    final response = await http.post(
+      url,
+      headers: headers,
+    );
+
+    final responseData = jsonDecode(utf8.decode(response.bodyBytes));
+    if (response.statusCode == 200) {
+      return responseData['data'];
+    } else {
+      throw Exception(responseData['message'] ?? '건강 분석에 실패했습니다.');
+    }
+  }
+
+  // [New] (선택사항) 이전 대화 내역 불러오기
+  Future<List<dynamic>> getChatHistory() async {
+    final url = Uri.parse('$_baseUrl/monkey/messages');
+    final headers = await _getAuthHeaders();
+
+    final response = await http.get(url, headers: headers);
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(utf8.decode(response.bodyBytes));
+      return responseData['data']; // List 형태 반환
+    } else {
+      return [];
+    }
+  }
+
   // 흡연 정보 등록 API
   Future<void> saveSmokingInfo({
     required String cigaretteType,
