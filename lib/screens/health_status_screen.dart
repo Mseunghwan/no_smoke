@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/health_status.dart';
 import '../models/user_settings.dart';
 import '../models/daily_survey.dart';
-import '../services/gemini_service.dart';
+import '../services/api_service.dart';
 
 class HealthStatusScreen extends StatefulWidget {
   final UserSettings settings;
@@ -27,39 +27,14 @@ class _HealthStatusScreenState extends State<HealthStatusScreen> {
   int? _heartRate;
   int? _steps;
   double? _oxygenLevel;
+  final ApiService _apiService = ApiService();
 
-  String _createHealthAnalysisPrompt(int hours, List<DailySurvey> surveys) {
-    final avgStressLevel = surveys.isEmpty
-        ? 0
-        : surveys.map((s) => s.stressLevel).reduce((a, b) => a + b) / surveys.length;
-
-    return '''
-전문의의 관점에서 사용자의 금연 진행 상태를 분석해주세요:
-
-기본 정보:
-- 금연 시간: $hours 시간
-- 평균 스트레스 레벨: ${avgStressLevel.toStringAsFixed(1)}/5
-
-신체 상태 데이터:
-- 심박수: ${_heartRate ?? '데이터 없음'} bpm
-- 일일 걸음 수: ${_steps ?? '데이터 없음'} steps
-- 산소포화도: ${_oxygenLevel?.toStringAsFixed(1) ?? '데이터 없음'}%
-
-분석 요청 사항:
-1. 현재 신체 기능 개선 상태
-2. 심혈관 건강 상태 평가
-3. 운동 능력 및 폐 기능 분석
-4. 스트레스 관리 전략 제안
-5. 앞으로의 건강 개선 전망
-''';
-  }
-
-  Future<String> _getAIAnalysis(String prompt) async {
+  Future<String> _getAIAnalysis() async { // 인자 필요 없음
     try {
-      final response = await GeminiService.getResponse(prompt);
+      final response = await _apiService.getHealthAnalysis();
       return response;
     } catch (e) {
-      return '건강 분석을 불러오는데 실패했습니다.';
+      return '건강 분석 데이터를 가져오는데 실패했습니다.\n(잠시 후 다시 시도해주세요)';
     }
   }
 
@@ -77,19 +52,19 @@ class _HealthStatusScreenState extends State<HealthStatusScreen> {
   @override
   void initState() {
     super.initState();
+
+    _loadHealthStatus();
   }
 
-
   Future<void> _loadHealthStatus() async {
+    // 1. 기본적인 시간 계산 (즉시 완료됨)
     final hours = DateTime.now().difference(widget.settings.quitDate).inHours;
 
     final lungCapacity = HealthStatus.calculateLungCapacity(hours);
     final bloodCirculation = HealthStatus.calculateBloodCirculation(hours);
     final nicotineLevel = HealthStatus.calculateNicotineLevel(hours);
 
-    final prompt = _createHealthAnalysisPrompt(hours, widget.surveys);
-    final analysis = await _getAIAnalysis(prompt);
-
+    // 2. 화면 먼저 그리기! (AI 분석 칸에는 "분석 중..." 표시)
     setState(() {
       _healthStatus = HealthStatus(
         smokeFreeHours: hours,
@@ -98,10 +73,46 @@ class _HealthStatusScreenState extends State<HealthStatusScreen> {
         nicotineLevel: nicotineLevel,
         improvements: _calculateImprovements(hours),
         recentSurveys: widget.surveys,
-        aiAnalysis: analysis,
+        aiAnalysis: "스털링이 건강 상태를 분석하고 있어요... 🐵\n(약 5~10초 정도 걸립니다)", // 임시 텍스트
       );
-      _isLoading = false;
+      _isLoading = false; // 로딩 끝! 화면 보여줌
     });
+
+    // 3. AI 분석 요청은 뒤에서 따로 실행 (비동기)
+    try {
+      final analysis = await _getAIAnalysis(); // 여기서 5초 걸려도 화면은 살아있음
+
+      // 화면이 여전히 켜져있다면 결과 업데이트
+      if (mounted) {
+        setState(() {
+          // 기존 데이터 유지하면서 aiAnalysis만 교체
+          _healthStatus = HealthStatus(
+            smokeFreeHours: _healthStatus.smokeFreeHours,
+            lungCapacityImprovement: _healthStatus.lungCapacityImprovement,
+            bloodCirculationImprovement: _healthStatus.bloodCirculationImprovement,
+            nicotineLevel: _healthStatus.nicotineLevel,
+            improvements: _healthStatus.improvements,
+            recentSurveys: _healthStatus.recentSurveys,
+            aiAnalysis: analysis, // 진짜 결과로 교체
+          );
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          // 에러 시 문구 교체 (기존 데이터 유지)
+          _healthStatus = HealthStatus(
+            smokeFreeHours: _healthStatus.smokeFreeHours,
+            lungCapacityImprovement: _healthStatus.lungCapacityImprovement,
+            bloodCirculationImprovement: _healthStatus.bloodCirculationImprovement,
+            nicotineLevel: _healthStatus.nicotineLevel,
+            improvements: _healthStatus.improvements,
+            recentSurveys: _healthStatus.recentSurveys,
+            aiAnalysis: "분석을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.",
+          );
+        });
+      }
+    }
   }
 
   Widget _buildHealthMetricsCard() {
