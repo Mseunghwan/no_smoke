@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/chat_message.dart';
+import '../services/socket_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final int smokeFreeHours;
@@ -13,7 +14,10 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final ApiService _apiService = ApiService(); // ApiService 인스턴스 생성
+  final ApiService _apiService = ApiService();
+  final SocketService _socketService = SocketService();
+
+
   final List<ChatMessage> _messages = [];
   bool _isTyping = false;
 
@@ -27,7 +31,8 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _loadChatHistory(); // 이전 대화 불러오기 (선택) 혹은 첫 인사
+    _connectWebSocket(); // 소켓 연결 시작
+    // _loadChatHistory(); // 필요시 주석 해제
   }
 
   // 초기 로딩: 백엔드에서 이전 대화 내역을 가져오거나, 가벼운 첫 인사를 보냄
@@ -38,37 +43,50 @@ class _ChatScreenState extends State<ChatScreen> {
     // 여기서는 "금연 조언"을 요청하여 첫 말문을 트겠습니다.
     _sendMessage("금연 중인데 힘이 되는 짧은 한마디 해줘", isInitiatedBySystem: true);
   }
+  void _connectWebSocket() {
+    _socketService.connectAndSubscribe(
+      onMessageReceived: (data) {
+        // 백엔드에서 보낸 MonkeyMessageResponseDto 구조에 맞춤
+        // 예: { "content": "금연 응원합니다!", "messageType": "REACTIVE", ... }
+        final String aiReply = data['content'] ?? "응답 오류";
+
+        if (mounted) {
+          setState(() {
+            _messages.add(ChatMessage(text: aiReply, isUser: false));
+            _isTyping = false; // 입력 중 표시 끄기
+          });
+          _scrollToBottom();
+        }
+      },
+    );
+  }
 
   Future<void> _sendMessage(String text, {bool isInitiatedBySystem = false}) async {
     if (text.trim().isEmpty) return;
 
     setState(() {
-      // 시스템이 시작한 대화(첫인사)가 아니면 내 말풍선 추가
       if (!isInitiatedBySystem) {
         _messages.add(ChatMessage(text: text, isUser: true));
       }
-      _isTyping = true;
+      _isTyping = true; // 스털링이 고민 중... 표시 켜기
     });
 
     if (!isInitiatedBySystem) _messageController.clear();
     _scrollToBottom();
 
     try {
-      // [변경] GeminiService 대신 ApiService 사용
-      final response = await _apiService.chatWithSterling(text);
+      // 1. HTTP로 질문 던지기 (RabbitMQ 큐에 넣기만 함)
+      // 이때 반환값은 "스털링이 고민을 시작했습니다..." 같은 임시 메시지임
+      final tempResponse = await _apiService.chatWithSterling(text);
 
-      setState(() {
-        _messages.add(ChatMessage(text: response, isUser: false));
-        _isTyping = false;
-      });
-      _scrollToBottom();
+      // 2. 임시 메시지는 화면에 안 보여줘도 됨 (취향 차이)
+      // 우리는 WebSocket으로 진짜 답이 올 때까지 '_isTyping' 상태로 기다립니다.
+      print(">>> 서버 응답(임시): $tempResponse");
+
     } catch (e) {
       setState(() => _isTyping = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('스털링과 연결할 수 없습니다.'),
-          backgroundColor: Color(0xFF6D28D9), // darkPurple
-        ),
+        const SnackBar(content: Text('메시지 전송 실패'), backgroundColor: darkPurple),
       );
     }
   }
