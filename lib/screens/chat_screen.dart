@@ -17,45 +17,111 @@ class _ChatScreenState extends State<ChatScreen> {
   final ApiService _apiService = ApiService();
   final SocketService _socketService = SocketService();
 
-
   final List<ChatMessage> _messages = [];
   bool _isTyping = false;
 
-  // 더 선명하고 다양한 보라색 테마 색상 정의
-  static const Color primaryPurple = Color(0xFF8B5CF6);      // 밝은 보라
-  static const Color lightPurple = Color(0xFFEDE9FE);        // 매우 연한 보라
-  static const Color darkPurple = Color(0xFF6D28D9);         // 진한 보라
-  static const Color accentPurple = Color(0xFFA78BFA);       // 악센트 보라
-  static const Color backgroundPurple = Color(0xFFF5F3FF);   // 배경 보라
+  // [Pagination 상태 변수]
+  int _currentPage = 0;      // 현재 로딩할 페이지 번호
+  bool _isLastPage = false;  // 더 불러올 데이터가 없는지
+  bool _isLoading = false;   // 현재 로딩 중인지
+
+  // 색상 정의 (기존 유지)
+  static const Color primaryPurple = Color(0xFF8B5CF6);
+  static const Color lightPurple = Color(0xFFEDE9FE);
+  static const Color darkPurple = Color(0xFF6D28D9);
+  static const Color accentPurple = Color(0xFFA78BFA);
+  static const Color backgroundPurple = Color(0xFFF5F3FF);
 
   @override
   void initState() {
     super.initState();
-    _connectWebSocket(); // 소켓 연결 시작
-    // _loadChatHistory(); // 필요시 주석 해제
+    _connectWebSocket();
+
+    // 1. 화면 진입 시 첫 페이지(가장 최신 20개) 로딩
+    _loadMoreMessages(initialLoad: true);
+
+    // 2. 스크롤 리스너 등록 (무한 스크롤)
+    _scrollController.addListener(_onScroll);
   }
 
-  // 초기 로딩: 백엔드에서 이전 대화 내역을 가져오거나, 가벼운 첫 인사를 보냄
-  void _loadChatHistory() async {
-    // 만약 이전 대화를 불러오고 싶다면 ApiService.getChatHistory() 호출 구현
-    // 여기서는 심플하게 스털링이 먼저 말을 거는 효과를 위해 빈 메시지 호출 등을 하거나
-    // UI상으로만 처리할 수 있습니다.
-    // 여기서는 "금연 조언"을 요청하여 첫 말문을 트겠습니다.
-    _sendMessage("금연 중인데 힘이 되는 짧은 한마디 해줘", isInitiatedBySystem: true);
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    _messageController.dispose();
+    super.dispose();
   }
+
+  // 스크롤 이벤트 핸들러
+  void _onScroll() {
+    // 스크롤이 상단(maxScrollExtent)에 거의 도달했을 때 (reverse: true 이므로 max가 상단)
+    // 픽셀 여유분을 200정도 둡니다.
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreMessages();
+    }
+  }
+
+  // 메시지 가져오기
+  Future<void> _loadMoreMessages({bool initialLoad = false}) async {
+    if (_isLoading || _isLastPage) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await _apiService.getChatHistory(
+        page: _currentPage,
+        size: 20,
+      );
+
+      List<dynamic> content = result['messages'];
+      bool isLast = result['isLast'];
+
+      // DTO Map -> ChatMessage 모델 변환
+      List<ChatMessage> newMessages = content.map((json) {
+        // 백엔드에서 받은 type 확인
+        String type = json['messageType'] ?? 'REACTIVE';
+
+        // [New] type이 'USER'면 내 메시지(isUser: true)로 처리
+        bool isUserMsg = (type == 'USER');
+
+        return ChatMessage(
+          text: json['content'] ?? '',
+          isUser: isUserMsg,
+        );
+      }).toList();
+      setState(() {
+        // 기존 리스트 뒤에 추가 (reverse 리스트이므로 뒤에 붙이면 과거 메시지가 됨)
+        _messages.addAll(newMessages);
+
+        _currentPage++; // 다음 페이지 준비
+        _isLastPage = isLast;
+        _isLoading = false;
+      });
+
+    } catch (e) {
+      setState(() => _isLoading = false);
+      print("채팅 기록 로딩 에러: $e");
+    }
+  }
+
   void _connectWebSocket() {
     _socketService.connectAndSubscribe(
       onMessageReceived: (data) {
-        // 백엔드에서 보낸 MonkeyMessageResponseDto 구조에 맞춤
-        // 예: { "content": "금연 응원합니다!", "messageType": "REACTIVE", ... }
         final String aiReply = data['content'] ?? "응답 오류";
-
         if (mounted) {
           setState(() {
-            _messages.add(ChatMessage(text: aiReply, isUser: false));
-            _isTyping = false; // 입력 중 표시 끄기
+            // 새 메시지는 리스트 맨 앞(화면 최하단)에 추가
+            _messages.insert(0, ChatMessage(text: aiReply, isUser: false));
+            _isTyping = false;
           });
-          _scrollToBottom();
+          // 새 메시지가 오면 스크롤을 맨 아래(0.0)로 이동
+          _scrollController.animateTo(
+            0.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
         }
       },
     );
@@ -66,41 +132,27 @@ class _ChatScreenState extends State<ChatScreen> {
 
     setState(() {
       if (!isInitiatedBySystem) {
-        _messages.add(ChatMessage(text: text, isUser: true));
+        // 내가 보낸 메시지 즉시 추가 (맨 앞)
+        _messages.insert(0, ChatMessage(text: text, isUser: true));
       }
-      _isTyping = true; // 스털링이 고민 중... 표시 켜기
+      _isTyping = true;
     });
 
     if (!isInitiatedBySystem) _messageController.clear();
-    _scrollToBottom();
+
+    // 메시지 전송 시 스크롤 맨 아래로
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0.0);
+    }
 
     try {
-      // 1. HTTP로 질문 던지기 (RabbitMQ 큐에 넣기만 함)
-      // 이때 반환값은 "스털링이 고민을 시작했습니다..." 같은 임시 메시지임
-      final tempResponse = await _apiService.chatWithSterling(text);
-
-      // 2. 임시 메시지는 화면에 안 보여줘도 됨 (취향 차이)
-      // 우리는 WebSocket으로 진짜 답이 올 때까지 '_isTyping' 상태로 기다립니다.
-      print(">>> 서버 응답(임시): $tempResponse");
-
+      await _apiService.chatWithSterling(text);
     } catch (e) {
       setState(() => _isTyping = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('메시지 전송 실패'), backgroundColor: darkPurple),
       );
     }
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
   }
 
   @override
@@ -167,9 +219,21 @@ class _ChatScreenState extends State<ChatScreen> {
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
+                reverse: true, // [중요] 채팅은 아래에서 위로 쌓임 (인덱스 0이 최신)
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                itemCount: _messages.length,
+                // 로딩 중이면 맨 위에 인디케이터 하나 더 보여주기 위해 +1
+                itemCount: _messages.length + (_isLoading ? 1 : 0),
                 itemBuilder: (context, index) {
+                  // 로딩 표시 렌더링 (리스트의 '끝' 부분 = 스크롤 최상단)
+                  if (index == _messages.length) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
+
                   final message = _messages[index];
                   return MessageBubble(message: message);
                 },

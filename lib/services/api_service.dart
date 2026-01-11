@@ -112,18 +112,37 @@ class ApiService {
     }
   }
 
-  // [New] (선택사항) 이전 대화 내역 불러오기
-  Future<List<dynamic>> getChatHistory() async {
-    final url = Uri.parse('$_baseUrl/monkey/messages');
+  Future<Map<String, dynamic>> getChatHistory({int page = 0, int size = 20}) async {
+    // 쿼리 파라미터로 page, size 전달
+    final userId = await _getUserId();
+    final url = Uri.parse('$_baseUrl/monkey/messages?page=$page&size=$size');
     final headers = await _getAuthHeaders();
 
     final response = await http.get(url, headers: headers);
 
     if (response.statusCode == 200) {
-      final responseData = jsonDecode(utf8.decode(response.bodyBytes));
-      return responseData['data']; // List 형태 반환
+      // Spring의 Slice 응답 구조:
+      // {
+      //   "status": "...",
+      //   "data": {
+      //      "content": [ ... 메시지 리스트 ... ],
+      //      "last": false, // 마지막 페이지 여부
+      //      "first": true,
+      //      ...
+      //   }
+      // }
+      final jsonResponse = jsonDecode(utf8.decode(response.bodyBytes));
+      final data = jsonResponse['data'];
+
+      List<dynamic> content = data['content'];
+      bool isLast = data['last'] ?? true;
+
+      return {
+        'messages': content, // 아직 DTO 상태 (Map)
+        'isLast': isLast,
+      };
     } else {
-      return [];
+      throw Exception('채팅 내역을 불러오는데 실패했습니다.');
     }
   }
 
