@@ -34,8 +34,10 @@ class ApiService {
 
     final responseData = jsonDecode(utf8.decode(response.bodyBytes));
     if (response.statusCode == 200) {
-      // **로그인 성공 시 토큰과 사용자 ID 저장**
-      await _storage.write(key: 'jwt_token', value: responseData['data']['token']);
+      // **백엔드 DTO(UserLoginResponseDto)에 맞춰 키 수정 (token -> accessToken)**
+      // **Refresh Token도 함께 저장**
+      await _storage.write(key: 'jwt_token', value: responseData['data']['accessToken']);
+      await _storage.write(key: 'refresh_token', value: responseData['data']['refreshToken']);
       await _storage.write(key: 'user_id', value: responseData['data']['id'].toString());
       return responseData;
     } else {
@@ -43,24 +45,78 @@ class ApiService {
     }
   }
 
-  // 로그아웃 (토큰 삭제)
+  // 로그아웃 (서버 통신 + 토큰 삭제)
   Future<void> logout() async {
-    await _storage.delete(key: 'jwt_token');
-    await _storage.delete(key: 'user_id');
+    try {
+      final accessToken = await _storage.read(key: 'jwt_token');
+      if (accessToken != null) {
+        final url = Uri.parse('$_baseUrl/auth/logout');
+
+        await http.post(
+          url,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $accessToken',
+          },
+        );
+      }
+    } catch (e) {
+      print("로그아웃 서버 통신 실패 (무시하고 로컬 삭제 진행): $e");
+    } finally {
+      // 로컬 토큰 삭제
+      await _storage.delete(key: 'jwt_token');
+      await _storage.delete(key: 'refresh_token');
+      await _storage.delete(key: 'user_id');
+    }
   }
 
-  // 저장된 토큰 가져오기
+  // 토큰 재발급 로직 (내부 사용)
+  Future<bool> _reissueToken() async {
+    try {
+      final accessToken = await _storage.read(key: 'jwt_token');
+      final refreshToken = await _storage.read(key: 'refresh_token');
+
+      if (accessToken == null || refreshToken == null) return false;
+
+      final url = Uri.parse('$_baseUrl/auth/reissue');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+          'RefreshToken': refreshToken,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(utf8.decode(response.bodyBytes));
+        final newAccessToken = responseData['data']['accessToken'];
+        final newRefreshToken = responseData['data']['refreshToken'];
+
+        await _storage.write(key: 'jwt_token', value: newAccessToken);
+        await _storage.write(key: 'refresh_token', value: newRefreshToken);
+        return true;
+      } else {
+        return false;
+      }
+    } catch (e) {
+      print('토큰 재발급 에러: $e');
+      return false;
+    }
+  }
+
+  // 저장된 액세스 토큰 가져오기
   Future<String?> getToken() async {
     return await _storage.read(key: 'jwt_token');
   }
 
-
-  // 인증 헤더 헬퍼 메소드
+  // 기본 인증 헤더 생성
   Future<Map<String, String>> _getAuthHeaders() async {
     final token = await getToken();
     return {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
+      'Authorization': 'Bearer $token', // 필터는 Authorization을 검사
     };
   }
 
@@ -72,37 +128,78 @@ class ApiService {
     return userId;
   }
 
-  // [New] 스털링 챗봇과 대화하기
+  // ------------------------------------------------------------------------
+  // [New] HTTP 요청 래퍼 메서드 (자동 토큰 갱신 로직 포함)
+  // ------------------------------------------------------------------------
+
+  // POST 요청 래퍼
+  Future<http.Response> _postWithAuth(Uri url, {Map<String, dynamic>? body}) async {
+    final headers = await _getAuthHeaders();
+    final response = await http.post(url, headers: headers, body: jsonEncode(body));
+
+    if (response.statusCode == 401) {
+      // 401 에러 시 토큰 재발급 시도
+      print("401 Unauthorized 감지 - 토큰 재발급 시도");
+      final isReissued = await _reissueToken();
+
+      if (isReissued) {
+        // 재발급 성공 시 헤더 갱신 후 재요청
+        final newHeaders = await _getAuthHeaders();
+        return await http.post(url, headers: newHeaders, body: jsonEncode(body));
+      } else {
+        // 재발급 실패 시 로그아웃 처리 필요 (호출부에서 예외 처리)
+        throw Exception('세션이 만료되었습니다. 다시 로그인해주세요.');
+      }
+    }
+    return response;
+  }
+
+  // GET 요청 래퍼
+  Future<http.Response> _getWithAuth(Uri url) async {
+    final headers = await _getAuthHeaders();
+    final response = await http.get(url, headers: headers);
+
+    if (response.statusCode == 401) {
+      print("401 Unauthorized 감지 - 토큰 재발급 시도");
+      final isReissued = await _reissueToken();
+
+      if (isReissued) {
+        final newHeaders = await _getAuthHeaders();
+        return await http.get(url, headers: newHeaders);
+      } else {
+        throw Exception('세션이 만료되었습니다. 다시 로그인해주세요.');
+      }
+    }
+    return response;
+  }
+
+  // ------------------------------------------------------------------------
+  // 기존 메서드들을 래퍼(_postWithAuth, _getWithAuth)를 사용하도록 수정
+  // ------------------------------------------------------------------------
+
+  // 스털링 챗봇과 대화하기
   Future<String> chatWithSterling(String message) async {
     final userId = await _getUserId();
     final url = Uri.parse('$_baseUrl/monkey/chat/$userId');
-    final headers = await _getAuthHeaders();
 
-    final response = await http.post(
-      url,
-      headers: headers,
-      body: jsonEncode({'message': message}),
-    );
+    // _postWithAuth 사용으로 변경
+    final response = await _postWithAuth(url, body: {'message': message});
 
     final responseData = jsonDecode(utf8.decode(response.bodyBytes));
     if (response.statusCode == 200) {
-      // 백엔드 ApiResponse 구조: { "status": "SUCCESS", "message": "...", "data": "AI 응답 텍스트" }
       return responseData['data'];
     } else {
       throw Exception(responseData['message'] ?? 'AI 응답을 받아오지 못했습니다.');
     }
   }
 
-  // [New] 건강 상태 분석 요청
+  // 건강 상태 분석 요청
   Future<String> getHealthAnalysis() async {
     final userId = await _getUserId();
     final url = Uri.parse('$_baseUrl/monkey/analysis/$userId');
-    final headers = await _getAuthHeaders();
 
-    final response = await http.post(
-      url,
-      headers: headers,
-    );
+    // _postWithAuth 사용 (body 없음)
+    final response = await _postWithAuth(url);
 
     final responseData = jsonDecode(utf8.decode(response.bodyBytes));
     if (response.statusCode == 200) {
@@ -113,24 +210,13 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getChatHistory({int page = 0, int size = 20}) async {
-    // 쿼리 파라미터로 page, size 전달
-    final userId = await _getUserId();
+    final userId = await _getUserId(); // user_id 사용하지 않더라도 체크용으로 호출
     final url = Uri.parse('$_baseUrl/monkey/messages?page=$page&size=$size');
-    final headers = await _getAuthHeaders();
 
-    final response = await http.get(url, headers: headers);
+    // _getWithAuth 사용
+    final response = await _getWithAuth(url);
 
     if (response.statusCode == 200) {
-      // Spring의 Slice 응답 구조:
-      // {
-      //   "status": "...",
-      //   "data": {
-      //      "content": [ ... 메시지 리스트 ... ],
-      //      "last": false, // 마지막 페이지 여부
-      //      "first": true,
-      //      ...
-      //   }
-      // }
       final jsonResponse = jsonDecode(utf8.decode(response.bodyBytes));
       final data = jsonResponse['data'];
 
@@ -138,7 +224,7 @@ class ApiService {
       bool isLast = data['last'] ?? true;
 
       return {
-        'messages': content, // 아직 DTO 상태 (Map)
+        'messages': content,
         'isLast': isLast,
       };
     } else {
@@ -155,40 +241,30 @@ class ApiService {
     required String quitGoal,
   }) async {
     final url = Uri.parse('$_baseUrl/smoking-info');
-    final headers = await _getAuthHeaders(); // 인증 헤더 가져오기
 
-    final response = await http.post(
-      url,
-      headers: headers, // 헤더에 토큰 포함!
-      body: jsonEncode({
-        'cigaretteType': cigaretteType,
-        'dailyConsumption': dailyConsumption,
-        // 백엔드는 LocalDateTime을 기대하므로 ISO 8601 형식으로 변환
-        'quitStartTime': quitDate.toIso8601String(),
-        'targetDate': targetDate.toIso8601String(),
-        'quitGoal': quitGoal,
-      }),
-    );
+    final response = await _postWithAuth(url, body: {
+      'cigaretteType': cigaretteType,
+      'dailyConsumption': dailyConsumption,
+      'quitStartTime': quitDate.toIso8601String(),
+      'targetDate': targetDate.toIso8601String(),
+      'quitGoal': quitGoal,
+    });
 
-    if (response.statusCode != 201) { // 201 Created
+    if (response.statusCode != 201) {
       final responseData = jsonDecode(utf8.decode(response.bodyBytes));
       throw Exception(responseData['message'] ?? '흡연 정보 저장에 실패했습니다.');
     }
   }
 
-  // 대시보드 데이터를 백엔드에서 불러와서 적용
+  // 대시보드 데이터 불러오기
   Future<Map<String, dynamic>> getDashboardData() async {
     final url = Uri.parse('$_baseUrl/dashboard');
-    final headers = await _getAuthHeaders(); // 인증 헤더 가져오기
 
-    final response = await http.get(
-      url,
-      headers: headers, // 헤더에 토큰 포함
-    );
+    final response = await _getWithAuth(url);
 
     if (response.statusCode == 200) {
       final responseData = jsonDecode(utf8.decode(response.bodyBytes));
-      return responseData['data']; // 실제 데이터는 'data' 키 안에 있습니다.
+      return responseData['data'];
     } else {
       throw Exception('대시보드 정보 로딩에 실패했습니다.');
     }
@@ -203,21 +279,16 @@ class ApiService {
     String? additionalNotes,
   }) async {
     final url = Uri.parse('$_baseUrl/surveys');
-    final headers = await _getAuthHeaders(); // 인증 헤더 가져오기
 
-    final response = await http.post(
-      url,
-      headers: headers,
-      body: jsonEncode({
-        'success': isSuccess,
-        'stressLevel': stressLevel,
-        'stressCause': stressCause,
-        'cravingLevel': cravingLevel,
-        'additionalNotes': additionalNotes,
-      }),
-    );
+    final response = await _postWithAuth(url, body: {
+      'success': isSuccess,
+      'stressLevel': stressLevel,
+      'stressCause': stressCause,
+      'cravingLevel': cravingLevel,
+      'additionalNotes': additionalNotes,
+    });
 
-    if (response.statusCode != 201) { // 201 Created
+    if (response.statusCode != 201) {
       final responseData = jsonDecode(utf8.decode(response.bodyBytes));
       throw Exception(responseData['message'] ?? '설문 저장에 실패했습니다.');
     }

@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/profile_item.dart';
 import '../provider/profile_provider.dart';
+import '../services/api_service.dart';
+import 'auth_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final int currentPoints;
@@ -312,6 +314,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: Text('프로필 꾸미기'),
         actions: [
+          IconButton(
+            icon: Icon(Icons.logout),
+            tooltip: '로그아웃',
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text('로그아웃'),
+                  content: Text('정말 로그아웃 하시겠습니까?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: Text('취소'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: Text('확인', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm == true) {
+                // 로그아웃 진행
+                try {
+                  await ApiService().logout();
+                } catch (e) {
+                  // 로그아웃 에러 발생 시에도 화면 이동은 진행
+                  print('로그아웃 에러: $e');
+                }
+
+                // 로그인 화면으로 이동 (스택 초기화)
+                if (mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const AuthScreen()),
+                        (route) => false,
+                  );
+                }
+              }
+            },
+          ),
           Center(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 16.0),
