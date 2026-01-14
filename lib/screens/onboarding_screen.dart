@@ -546,78 +546,78 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
                 ),
               ),
               const SizedBox(height: 24),
-        const SizedBox(height: 24),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.purple.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () async {
-                final DateTime? picked = await showDatePicker(
-                  context: context,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                  builder: (context, child) {
-                    return Theme(
-                      data: Theme.of(context).copyWith(
-                        colorScheme: ColorScheme.light(
-                          primary: Colors.purple,
-                          onPrimary: Colors.white,
-                          surface: Colors.purple[50]!,
-                        ),
-                      ),
-                      child: child!,
-                    );
-                  },
-                );
-                if (picked != null) {
-                  setState(() {
-                    _targetDate = picked;
-                  });
-                }
-              },
-              borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.calendar_today,
-                      color: Colors.purple[600],
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      _targetDate == null
-                          ? '목표일자 선택하기'
-                          : DateFormat('yyyy년 MM월 dd일').format(_targetDate!),
-                      style: TextStyle(
-                        color: Colors.purple[800],
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
+              const SizedBox(height: 24),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.purple.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: ColorScheme.light(
+                                primary: Colors.purple,
+                                onPrimary: Colors.white,
+                                surface: Colors.purple[50]!,
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _targetDate = picked;
+                        });
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.calendar_today,
+                            color: Colors.purple[600],
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            _targetDate == null
+                                ? '목표일자 선택하기'
+                                : DateFormat('yyyy년 MM월 dd일').format(_targetDate!),
+                            style: TextStyle(
+                              color: Colors.purple[800],
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
-      ],
-    ),
-        ),
-        ),
+      ),
     );
   }
 
@@ -742,6 +742,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
       ),
     );
   }
+
   void _submitForm() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
@@ -767,10 +768,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
           quitGoal: _goalController.text.trim(),
         );
 
-        // 2. API 호출 성공 후, 기존처럼 로컬에도 정보 저장
+        // 2. [추가] 닉네임을 서버에 업데이트
+        // 회원가입 시 "새로운 사용자"로 등록된 이름을 여기서 입력한 닉네임으로 변경
+        await _apiService.updateUserName(_nickname);
+
+        // 3. 로컬에도 정보 저장
         final settings = UserSettings(
           quitDate: _quitDate!,
-          nickname: _nickname, // 닉네임은 이전 화면에서 받아와야 함 (지금은 임시)
+          nickname: _nickname,
           cigaretteType: _cigaretteType,
           cigarettesPerDay: int.parse(_smokingAmountController.text),
           cigarettePrice: 4500,
@@ -783,7 +788,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
 
         if (!mounted) return;
 
-        // 3. 홈 화면으로 이동
+        // 4. 홈 화면으로 이동
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => HomeScreen(settings: settings)),
