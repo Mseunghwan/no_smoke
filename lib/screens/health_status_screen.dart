@@ -3,6 +3,7 @@ import '../models/health_status.dart';
 import '../models/user_settings.dart';
 import '../models/daily_survey.dart';
 import '../services/api_service.dart';
+import '../services/socket_service.dart'; // [추가] 소켓 서비스 임포트
 
 class HealthStatusScreen extends StatefulWidget {
   final UserSettings settings;
@@ -18,8 +19,6 @@ class HealthStatusScreen extends StatefulWidget {
   _HealthStatusScreenState createState() => _HealthStatusScreenState();
 }
 
-
-
 class _HealthStatusScreenState extends State<HealthStatusScreen> {
   late HealthStatus _healthStatus;
   bool _isLoading = true;
@@ -27,14 +26,60 @@ class _HealthStatusScreenState extends State<HealthStatusScreen> {
   int? _heartRate;
   int? _steps;
   double? _oxygenLevel;
-  final ApiService _apiService = ApiService();
 
-  Future<String> _getAIAnalysis() async { // 인자 필요 없음
+  final ApiService _apiService = ApiService();
+  final SocketService _socketService = SocketService(); // [추가] 소켓 인스턴스 생성
+
+  @override
+  void initState() {
+    super.initState();
+    _connectWebSocket(); // [추가] 화면 진입 시 소켓 연결
+    _loadHealthStatus();
+  }
+
+  @override
+  void dispose() {
+    _socketService.disconnect(); // [추가] 화면 종료 시 소켓 연결 해제
+    super.dispose();
+  }
+
+  // [추가] 웹소켓 연결 및 구독 설정
+  void _connectWebSocket() {
+    _socketService.connectAndSubscribe(
+      onMessageReceived: (Map<String, dynamic> data) {
+        // 로그 예시: {"messageId":4, "content":"환자분...", "messageType":"REACTIVE", ...}
+        // content 필드에 분석 내용이 담겨져 옴
+        if (data.containsKey('content') && data['content'] != null) {
+          _updateAIAnalysisResult(data['content']);
+        }
+      },
+    );
+  }
+
+  // [추가] 소켓으로 받은 데이터로 화면 업데이트
+  void _updateAIAnalysisResult(String analysisContent) {
+    if (!mounted) return;
+
+    setState(() {
+      _healthStatus = HealthStatus(
+        smokeFreeHours: _healthStatus.smokeFreeHours,
+        lungCapacityImprovement: _healthStatus.lungCapacityImprovement,
+        bloodCirculationImprovement: _healthStatus.bloodCirculationImprovement,
+        nicotineLevel: _healthStatus.nicotineLevel,
+        improvements: _healthStatus.improvements,
+        recentSurveys: _healthStatus.recentSurveys,
+        aiAnalysis: analysisContent, // 분석 내용 교체
+      );
+    });
+  }
+
+  // HTTP 요청은 분석을 '트리거'하는 용도로 사용 (응답값은 무시하거나 백업용으로 사용)
+  Future<void> _triggerAIAnalysis() async {
     try {
-      final response = await _apiService.getHealthAnalysis();
-      return response;
+      // 분석 요청을 보냄 (실제 결과는 소켓으로 올 가능성이 높음)
+      await _apiService.getHealthAnalysis();
     } catch (e) {
-      return '건강 분석 데이터를 가져오는데 실패했습니다.\n(잠시 후 다시 시도해주세요)';
+      print('분석 요청 에러 (소켓으로 데이터가 올 수 있으므로 무시 가능): $e');
     }
   }
 
@@ -49,22 +94,15 @@ class _HealthStatusScreenState extends State<HealthStatusScreen> {
     return improvements;
   }
 
-  @override
-  void initState() {
-    super.initState();
-
-    _loadHealthStatus();
-  }
-
   Future<void> _loadHealthStatus() async {
-    // 1. 기본적인 시간 계산 (즉시 완료됨)
+    // 1. 기본적인 시간 계산
     final hours = DateTime.now().difference(widget.settings.quitDate).inHours;
 
     final lungCapacity = HealthStatus.calculateLungCapacity(hours);
     final bloodCirculation = HealthStatus.calculateBloodCirculation(hours);
     final nicotineLevel = HealthStatus.calculateNicotineLevel(hours);
 
-    // 2. 화면 먼저 그리기! (AI 분석 칸에는 "분석 중..." 표시)
+    // 2. 화면 먼저 그리기 (로딩 해제 및 "분석 중" 표시)
     setState(() {
       _healthStatus = HealthStatus(
         smokeFreeHours: hours,
@@ -73,46 +111,13 @@ class _HealthStatusScreenState extends State<HealthStatusScreen> {
         nicotineLevel: nicotineLevel,
         improvements: _calculateImprovements(hours),
         recentSurveys: widget.surveys,
-        aiAnalysis: "스털링이 건강 상태를 분석하고 있어요... 🐵\n(약 5~10초 정도 걸립니다)", // 임시 텍스트
+        aiAnalysis: "스털링이 건강 상태를 분석하고 있어요... 🐵\n(약 5~10초 정도 걸립니다)",
       );
-      _isLoading = false; // 로딩 끝! 화면 보여줌
+      _isLoading = false;
     });
 
-    // 3. AI 분석 요청은 뒤에서 따로 실행 (비동기)
-    try {
-      final analysis = await _getAIAnalysis(); // 여기서 5초 걸려도 화면은 살아있음
-
-      // 화면이 여전히 켜져있다면 결과 업데이트
-      if (mounted) {
-        setState(() {
-          // 기존 데이터 유지하면서 aiAnalysis만 교체
-          _healthStatus = HealthStatus(
-            smokeFreeHours: _healthStatus.smokeFreeHours,
-            lungCapacityImprovement: _healthStatus.lungCapacityImprovement,
-            bloodCirculationImprovement: _healthStatus.bloodCirculationImprovement,
-            nicotineLevel: _healthStatus.nicotineLevel,
-            improvements: _healthStatus.improvements,
-            recentSurveys: _healthStatus.recentSurveys,
-            aiAnalysis: analysis, // 진짜 결과로 교체
-          );
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          // 에러 시 문구 교체 (기존 데이터 유지)
-          _healthStatus = HealthStatus(
-            smokeFreeHours: _healthStatus.smokeFreeHours,
-            lungCapacityImprovement: _healthStatus.lungCapacityImprovement,
-            bloodCirculationImprovement: _healthStatus.bloodCirculationImprovement,
-            nicotineLevel: _healthStatus.nicotineLevel,
-            improvements: _healthStatus.improvements,
-            recentSurveys: _healthStatus.recentSurveys,
-            aiAnalysis: "분석을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.",
-          );
-        });
-      }
-    }
+    // 3. AI 분석 요청 (결과는 위 _connectWebSocket() 에서 수신하여 처리)
+    await _triggerAIAnalysis();
   }
 
   Widget _buildHealthMetricsCard() {
